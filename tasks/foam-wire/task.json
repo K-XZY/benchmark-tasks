@@ -1,0 +1,20 @@
+{
+  "title": "Cut a foam block along a printed curve by moving it past a fixed hot ribbon",
+  "category": "Impact on jobs",
+  "keywords": [
+    "moving the work past a fixed tool",
+    "following a curve",
+    "reversed view",
+    "model making",
+    "bimanual"
+  ],
+  "instruction": "Cut the foam block along the printed curve: hold it in both arms and move and turn it past the fixed hot ribbon. Then move it clear and take both grippers away.",
+  "context": "Model Makers (O*NET 51-4061) cut foam by moving the work past a fixed hot tool. The tool stays still, so to cut left the block must go right, and a flat ribbon cuts cleanly only along its flat, so the block must turn about it as the curve turns.",
+  "setup": "Two YAM arms at the near edge of a table; positions are (x forward from the arm bases, y left) in cm, heights above the table. A low-power bench hot-ribbon foam cutter, its element a flat nichrome ribbon 1 cm wide with its flat along x, stands fixed at (28, 0), hanging from an arm 27 up, on a column at (62, 0), and stopping just short of the board. A white foam block, 15 cm along x, 20 cm along y, 5 high, is glued on a thin wooden board, 19 x 31 cm, 0.6 thick, that slides on the table. Yellow grip posts, 2 x 4 x 5 cm, stand on the board at each side, 26 cm apart, level with the block's centre along x. A blue curve 8 mm wide is printed on the foam, with x and y from the block's centre: y = 2 cm x (1 + cos(2 pi x / 15 cm)), from the far edge to the near edge, 8 ticks 1.875 cm apart along x. The block starts with its far edge 5 cm short of the ribbon, the curve's start in line with it. A black kerf shows where the ribbon has passed.",
+  "scoring": "Measured with a ruler at each of the 8 ticks on the cut block. A tick is good when the kerf there is within 5 mm of the tick's centre and at most 6 mm wide. 1.0 when all 8 are good, the block is at least 1 cm clear of the ribbon, and fingers are at least 3 cm from block and board, for 1 s. Otherwise 0.75 x good ticks / 8. 0 if the block is lifted over the ribbon, comes back onto the ribbon after leaving it, or the cut starts more than 1 cm off the curve's start at the far edge.",
+  "run_limit": "1,400 steps (70 s at 20 Hz)",
+  "reset_notes": "The block and its board are consumed in a real trial: glue on a new block with a new printed curve. In sim, nothing is consumed.",
+  "fidelity": "Rigid-body physics at 240 Hz on GPU. The cutter stands for a bench hot-ribbon foam cutter, whose flat nichrome ribbon cuts along its flat. The ribbon has no collider with the block. The kerf, a slot in real foam, is drawn black, as wide as 2 mm plus 1 cm x the sine of how far the feed turns from the flat. A real cut's feed rate is untested and may be far slower. One grip could steer the block: both arms are not forced.",
+  "scores": "Dream-1 run: 0.0; demo: 1.0",
+  "media": "M-GL92QT"
+}
