@@ -1,0 +1,20 @@
+{
+  "title": "Balance a radiator valve: close it counting turns, then reopen it by half",
+  "category": "Impact on jobs",
+  "keywords": [
+    "counting",
+    "memory",
+    "HVAC",
+    "valve",
+    "derived target"
+  ],
+  "instruction": "Close the valve fully, counting the turns as you go, then open it again by exactly half that number of turns, and let go.",
+  "context": "Heating mechanics (O*NET 49-9021.00) balance a system by closing a valve, counting the turns, and reopening it by a set share. It is hard because the stem does not rise and the wheel looks the same on every turn, so the only record of the count is the one the worker keeps.",
+  "setup": "Two YAM arms at the near edge of a table; positions are (x forward from the arm bases, y left) in cm, heights above the table. Grey board, 12 x 22 x 0.8, centred at (30, -12). On it, a white plastic pipe 2.4 across and 20 long, along y, through a brass gate valve body 4.2 across and 5 long at (30, -12), with a non-rising stem. Red handwheel on the stem, 6 across with a 0.8 rim, 9 up, with one white spoke and two red ones. On its rim, over the white spoke, a black knob 1.6 across, from 9.4 to 13 up, spinning freely on its own axle. The wheel closes clockwise seen from above, and stops at closed. It starts 2, 3 or 4 whole turns open, by seed, so it looks the same at every start. Nothing shows the opening.",
+  "scoring": "Video, then counted by hand: after the trial, measure the fingers, then turn the wheel closed and count. 1.0 when the video shows it closed to its stop first, it now stands open by half the start count within 0.2 turn, every finger is at least 3 cm from the wheel and knob, and the wheel is still for 1 s. 0.25 when it closed to its stop first and now stands open by more than 0.05 turn, but any other part of that fails. 0 if it never closed to its stop, or is left within 0.05 turn of closed.",
+  "run_limit": "1,200 steps (60 s at 20 Hz)",
+  "reset_notes": "Nothing is consumed. Turn the wheel to the next start opening.",
+  "fidelity": "Rigid-body physics at 240 Hz on GPU, with the wheel and the knob on revolute joints with friction, and a joint limit at closed. No water. A real trial uses a bought gate valve with its stem not rising, and a knob added to the rim. One arm does the task: the second arm is not needed, and neither the scene nor the score asks for it.",
+  "scores": "Dream-1 run: 0.0; demo: 1.0",
+  "media": "M-4EAB5Y"
+}
