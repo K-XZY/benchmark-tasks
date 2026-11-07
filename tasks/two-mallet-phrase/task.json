@@ -1,0 +1,20 @@
+{
+  "title": "Play a six-note phrase from a printed card, with a mallet in each hand",
+  "category": "Impact on jobs",
+  "keywords": [
+    "tool in each hand",
+    "timing",
+    "reading a card",
+    "glockenspiel",
+    "rebound"
+  ],
+  "instruction": "Play the notes on the card in order, left to right, at one note every half second, with one mallet in each hand, taking turns, then lay the mallets back in their cradles.",
+  "context": "Musicians and Singers (O*NET 27-2042) read a part and strike it in time. At one note each half second with turns between hands, each arm must get to its next bar during the other's stroke, and a mallet has to rebound, not press. A wrong or late note cannot be taken back.",
+  "setup": "Two YAM arms at the near edge of a table; positions are (x forward from the arm bases, y left) in cm, heights above the table. A glockenspiel in two groups of three bars, 11 x 3.8 cm, on dark rails, 40 cm apart at x 42: red, yellow and green at y 25, 20 and 15; blue, white and purple at y -15, -20 and -25. Each bar's top is 3.5 high, and it gives up to 4 mm on a spring. A felt mallet, 18 cm long with a 2.4 cm head toward +x and a flat 4 cm grip in the middle, lies in a wooden cradle at (20, 20) and another at (20, -20), with its shaft 4 high. A white card, 8 x 40 cm, lies flat at (62, 0), with six 5 cm coloured squares in a row, the first toward +y. The seed modulo 3 picks the card, each taking turns between the groups: 0, yellow, white, red, purple, green, blue; 1, blue, green, purple, yellow, white, red; 2, green, purple, yellow, blue, red, white.",
+  "scoring": "Measured from a phone recording and video, with a tape for the fingers. 1.0 when all six notes are struck in the card's order, each with the mallet on its own side, every gap is 0.4 to 0.6 s, and both mallets lie in their cradles with every fingertip at least 3 cm from them, held for 1 s. 0.9 when the same six notes and gaps are right, but the mallets are not laid back. Otherwise 0.15 for each note right from the first, up to the first gap outside 0.4 to 0.6 s, so 0.15 to 0.75. 0 if a wrong bar is struck, or a bar out of order, or a bar with the other side's mallet; a seventh note is struck; a bar goes down with no mallet head over it, as by a hand or a shaft; a mallet falls; a mallet head stays on a bar for 0.3 s or more; or no note is played.",
+  "run_limit": "400 steps (20 s at 20 Hz)",
+  "reset_notes": "Lay both mallets in their cradles, and put down the card for the seed.",
+  "fidelity": "Rigid-body physics at 240 Hz on GPU. Each bar is a rigid part on a stiff spring, with no sound: a note counts when a bar goes down 1 mm with the mallet head on it, and a head stays on a bar when it holds the bar 1 mm down. A real trial reads the notes from a recording. The mallets are free bodies with a flat grip, since a round shaft turned in the fingers. Both arms are forced by a scoring rule, the wrong side's mallet, and by the turns at this tempo, not by reach alone.",
+  "scores": "Dream-1 run: 0.0; demo: 1.0",
+  "media": "M-APEW4W"
+}
