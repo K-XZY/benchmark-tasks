@@ -23,6 +23,8 @@ inspect-robots run --embodiment yam_arena -E task=task.py -E object_jitter=0 -E 
 ```bash
 python demokit.py task.py OUT            # full score, with a video
 python demokit.py task.py OUT --fast --mode slide   # the block goes through without turning
+python demokit.py task.py OUT --fast --mode half    # the cut stops at the block's middle
+python demokit.py task.py OUT --fast --mode gash    # on the line almost to the near edge, then 3 cm sideways
 python3 check_score.py                   # the score lines on hand-built states, with no simulator
 ```
 
@@ -30,16 +32,18 @@ The demo reads the block's pose, as a camera could see it.
 
 ## Scoring
 
-See `scoring` in `task.json`, and `judge` and `Trial` in `task.py`.
+See `scoring` in `task.json`, and `judge`, `Kerf` and `Trial` in `task.py`. `check_score.py` runs `judge` on hand-built states and `Kerf` on whole hand-built cuts, among them one that passes every tick and then cuts out through the side.
 
 ## Results
 
 | Run | What it does | Score |
 |---|---|---|
 | Dream-1 | Run at 320 x 176, 1,400 steps | 0.0 |
-| `full` | The whole task | 1.0, at step 581 (29.1 s), 8 of 8 ticks good |
-| `slide` | Goes through on the line, without turning: 4 of 8 ticks too wide | 0.375 |
-| `check_score.py` | Lifted over the ribbon; started over 1 cm off the line | 0 |
+| `full` | The whole task | 1.0, at step 1003 (50.2 s), edge to edge on the line |
+| `slide` | Goes through on the line, without turning: the kerf is too wide from 1.3 cm in | 0.065 |
+| `half` | On the line to the block's middle, then lets go | 0.379 |
+| `gash` | On the line almost to the near edge, then 3 cm sideways | 0 |
+| `check_score.py` | A second cut; started over 1 cm off the line; board lifted onto the ribbon | 0 |
 
 ## Simplified
 
@@ -47,7 +51,7 @@ See `fidelity` in `task.json`.
 
 ## Runtime and seeds
 
-The demo takes about 29 s of simulated time, about 2 minutes of wall time on one GPU. There is no randomness: `object_jitter=0`, so no seed is needed.
+The demo takes about 50 s of simulated time, about 5 minutes of wall time on one shared GPU. There is no randomness: `object_jitter=0`, so no seed is needed.
 
 ## Sources
 
