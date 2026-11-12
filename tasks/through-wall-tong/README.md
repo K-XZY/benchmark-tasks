@@ -38,6 +38,7 @@ See `scoring` in `task.json`, and `judge` and `Trial` in `task.py`. A vial that 
 |---|---|---|
 | Dream-1 | Run at 320 x 176, 1,400 steps | 0.0 |
 | `full` | The whole task | 1.0, at step 468 (23.4 s) |
+| `check_score.py` | In the holder, jaws clear, still for 1 s; for 0.95 s | 1.0; 0.5 |
 | `lifted` | Stops holding the vial up | 0.25 |
 | `hold` | Stops with it in the holder, jaws closed | 0.5 |
 | `near` | Lets go in the holder, jaws left round it | 0.5 |

@@ -27,6 +27,7 @@ SCENE = "station"
 INSTRUCTION = "Use the tong through the wall to move the vial from the blue rack into the grey holder, and leave it standing there with the jaws clear of it. Pull the red lever to close the jaws; they open when it is let go."
 SUCCESS_HOLD_S = 1.0
 SCORE_OVER = "end"
+HOLD_STEPS = 20  # SUCCESS_HOLD_S at 20 Hz: the harness ends the trial with 1.0 once success() has held this many control steps
 TOP = d.TABLE_TOP
 
 LOOKS = {
@@ -174,11 +175,15 @@ def rod_rotation(yaw: float, pitch: float) -> np.ndarray:
     return np.array([[cy, -sy, 0.0], [sy, cy, 0.0], [0.0, 0.0, 1.0]]) @ np.array([[cp, 0.0, sp], [0.0, 1.0, 0.0], [-sp, 0.0, cp]])
 
 
-def judge(failed, off_axis: float, height: float, tilt: float, still: bool, jaw_gaps) -> tuple[bool, float, bool, bool]:
-    """The score now, from what a tape measure and a video show: (full, score, in the holder, held in the jaws). Run on hand-built states by check_score.py."""
+def judge(failed, off_axis: float, height: float, tilt: float, still: bool, jaw_gaps, held_steps: int = HOLD_STEPS) -> tuple[bool, float, bool, bool]:
+    """The score now, from what a tape measure and a video show: (full, score, in the holder, held in the jaws).
+    full: every 1.0 condition holds at this step. held_steps: for how many control steps they have held, this one included.
+    The score is 1.0 once they have held for SUCCESS_HOLD_S, and the lower score of the text until then. Run on hand-built states by check_score.py."""
     in_holder = bool(off_axis <= HOLDER_R and abs(height) <= 0.004 and tilt <= 5.0)
     held = bool(height >= 0.03 and max(jaw_gaps) <= 0.004)  # both jaws on it
     full = bool(failed is None and in_holder and still and min(jaw_gaps) >= CLEAR)
+    if full and held_steps >= HOLD_STEPS:
+        return True, 1.0, in_holder, held
     return full, 0.0 if failed else (0.5 if in_holder else (0.25 if held else 0.0)), in_holder, held
 
 
@@ -188,6 +193,7 @@ class Trial:
     def reset(self, env=None) -> None:
         self.failed = None
         self.full, self.score = False, 0.0
+        self.held = 0  # control steps the full state has lasted
         self.best = "nothing"
         self.steps = 0
         if env is not None:
@@ -226,7 +232,10 @@ class Trial:
             if self.failed:
                 print(f"[tong] failed for good: the vial {self.failed}", flush=True)
         off_axis = float(np.hypot(*(vial.pos[:2] - np.array(HOLDER_XY))))
-        self.full, self.score, in_holder, held = judge(self.failed, off_axis, height, vial.tilt_deg(), vial.resting(), jaw_gaps)
+        self.full, self.score, in_holder, held = judge(self.failed, off_axis, height, vial.tilt_deg(), vial.resting(), jaw_gaps, self.held + 1)
+        self.held = self.held + 1 if self.full else 0
+        if self.held == HOLD_STEPS:
+            print(f"[tong] full state held {HOLD_STEPS * d.DT:.2f} s: score {self.score}", flush=True)
         state = "full" if self.full else ("in the holder" if in_holder else ("held up" if held else "nothing"))
         if state != self.best:
             self.best = state
@@ -245,6 +254,7 @@ def success(objects) -> bool:
 
 
 def score(objects) -> float:
+    """1.0 once the full state has held for SUCCESS_HOLD_S; otherwise the lower score of the scoring text for the state."""
     return TRIAL.score
 
 
