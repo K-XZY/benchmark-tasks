@@ -8,7 +8,7 @@ import sys
 import numpy as np
 
 src = pathlib.Path(__file__).with_name("task.py").read_text()
-keep = {"GOOD_OUT_S", "FAIR_OUT_S", "RAIL_Y", "START_S", "LONG_S", "AHEAD", "WINDOW_DEG"}
+keep = {"GOOD_OUT_S", "FAIR_OUT_S", "RAIL_Y", "START_S", "LONG_S", "AHEAD", "WINDOW_DEG", "SUCCESS_HOLD_S", "HOLD_STEPS"}
 ns = {"np": np, "math": math}
 for node in ast.parse(src).body:
     if isinstance(node, ast.Assign) and any(n.id in keep for t in node.targets for n in ast.walk(t) if isinstance(n, ast.Name)):
@@ -16,12 +16,14 @@ for node in ast.parse(src).body:
     if isinstance(node, ast.FunctionDef) and node.name in ("schedule", "belt_y", "judge"):
         exec("from __future__ import annotations\n" + ast.get_source_segment(src, node), ns)
 judge, schedule, belt_y = ns["judge"], ns["schedule"], ns["belt_y"]
+assert ns["HOLD_STEPS"] == round(ns["SUCCESS_HOLD_S"] * 20), "HOLD_STEPS must be SUCCESS_HOLD_S at 20 Hz"
 START, AHEAD, WIN, FAIR = ns["START_S"], ns["AHEAD"], math.radians(ns["WINDOW_DEG"]), ns["FAIR_OUT_S"]
 
 # (seconds outside the band, good press, lamp passed, fingers clear), wanted (full, score)
 CASES = {
-    "1 s outside, good press, clear": ((1.0, True, True, True), (True, 0.75)),
-    "6 s outside, good press, clear": ((6.0, True, True, True), (True, 0.75)),
+    "1 s outside, good press, clear, for 1 s": ((1.0, True, True, True, 20), (True, 1.0)),
+    "1 s outside, good press, clear, for 0.95 s": ((1.0, True, True, True, 19), (True, 0.75)),
+    "6 s outside, good press, clear, for 1 s": ((6.0, True, True, True, 20), (True, 1.0)),
     "1 s outside, good press, hand still on the bar": ((1.0, True, True, False), (False, 0.75)),
     "1 s outside, late press": ((1.0, False, True, True), (False, 0.75)),
     "1 s outside, no press": ((1.0, False, True, False), (False, 0.75)),

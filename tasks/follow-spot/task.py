@@ -25,6 +25,7 @@ SCENE = "station"
 INSTRUCTION = "Hold the bar of the moving head and turn it so that the camera stays on the figure as it moves along its rail. When the red lamp comes on, press the stop button within 1 s while keeping the camera on the figure. When the figure has stopped, let go of the bar."
 SUCCESS_HOLD_S = 1.0
 SCORE_OVER = "end"
+HOLD_STEPS = 20  # SUCCESS_HOLD_S at 20 Hz: the harness ends the trial with 1.0 once success() has held this many control steps
 TOP = d.TABLE_TOP
 DT = d.DT
 
@@ -160,13 +161,16 @@ def _seed() -> int:
     return int(os.environ.get("TASK_SEED", "1"))
 
 
-def judge(outside_s: float, good_press: bool, lamp_passed: bool, clear: bool) -> tuple[bool, float]:
-    """The score now: (full, score). `outside_s`: seconds with the figure outside the band, from the belt's start to the lamp. Run on hand-built states by check_score.py."""
+def judge(outside_s: float, good_press: bool, lamp_passed: bool, clear: bool, held_steps: int = HOLD_STEPS) -> tuple[bool, float]:
+    """The score now: (full, score). `outside_s`: seconds with the figure outside the band, from the belt's start to the lamp.
+    full: every 1.0 condition holds at this step. held_steps: for how many control steps they have held, this one included.
+    The score is 1.0 once they have held for SUCCESS_HOLD_S, and the lower score of the text until then. Run on hand-built states by check_score.py."""
     if not lamp_passed or outside_s > FAIR_OUT_S:
         return False, 0.0
     if outside_s > GOOD_OUT_S:
         return False, 0.5
-    return bool(good_press and clear), 0.75
+    full = bool(good_press and clear)
+    return full, 1.0 if full and held_steps >= HOLD_STEPS else 0.75
 
 
 class Trial:
@@ -182,6 +186,7 @@ class Trial:
         self.good_press = False
         self.stopped_at = None  # a press stops the recording, whenever it comes
         self.full, self.score = False, 0.0
+        self.held = 0  # control steps the full state has lasted
         if env is not None:
             self.lamp_on = None
             self.step(env, count=False)
@@ -213,7 +218,10 @@ class Trial:
             self.pressed_t = self.stopped_at = t
             self.good_press = bool(self.lamp_t <= t <= self.lamp_t + 1.0 and err <= WINDOW_DEG)
             print(f"[spot] pressed at {t:.2f} s, {t - self.lamp_t:+.2f} s from the lamp, aim off by {err:.1f} deg: {'good' if self.good_press else 'no credit'}; outside the band for {self.outside_s:.1f} s", flush=True)
-        self.full, self.score = judge(self.outside_s, self.good_press, t >= self.lamp_t, self._fingers_clear(env))
+        self.full, self.score = judge(self.outside_s, self.good_press, t >= self.lamp_t, self._fingers_clear(env), self.held + 1)
+        self.held = self.held + 1 if self.full else 0
+        if self.held == HOLD_STEPS:
+            print(f"[spot] full state held {HOLD_STEPS * d.DT:.2f} s: score {self.score}", flush=True)
 
     def _fingers_clear(self, env) -> bool:
         tips = m.fingertips(env)
@@ -239,6 +247,7 @@ def success(objects) -> bool:
 
 
 def score(objects) -> float:
+    """1.0 once the full state has held for SUCCESS_HOLD_S; otherwise the lower score of the scoring text for the state."""
     return TRIAL.score
 
 
@@ -379,5 +388,7 @@ def demo_script(ctx):
         yield from bar_arm.wait(2.0)
         return
     here = bar_arm.tcp()
-    yield from bar_arm.open(t=0.5)
-    yield from ctx.together(bar_arm.move(here + [0.0, 0.0, 0.07], t=0.8, label="off the bar"), other.move(over + [0.0, 0.0, 0.05], t=0.8, label="clear of the button"))
+    yield from bar_arm.open(t=0.4)
+    # Well up and away, so that the film shows the release before the trial ends, 1 s after the fingers are clear.
+    yield from ctx.together(bar_arm.move(here + [0.0, 0.0, 0.14], t=0.7, label="off the bar"), other.move(over + [0.0, 0.0, 0.12], t=0.7, label="clear of the button"))
+    print(f"[spot] let go at {ctx.t:.2f} s", flush=True)

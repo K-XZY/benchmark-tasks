@@ -4,6 +4,8 @@ A camera on a moving head is panned by its long bar to follow a small person on 
 
 **Ability tested:** keeping aim on a target that moves unpredictably, in real time, through a tool, then reacting to a cue with the other arm without losing aim.
 
+**Why it is familiar:** filming something that moves is an everyday act: a child running in a school race, a dog in the park, a speaker pacing a stage, a car going past. Most people do it with a phone; on a tripod, the camera sits on a pan head and is turned by its handle, as here. Keeping the subject in frame while it starts, stops and changes direction, and then reacting to a cue without losing it, is what makes such a film usable.
+
 **Both arms are needed only for the press credit.** One arm can track. An arm that leaves the bar for the button loses the aim, as the figure moves out of the band in under a second, and the right arm cannot reach the button at all. This is reasoned, and has not been run in physics.
 
 ## Requirements
@@ -36,9 +38,10 @@ See `scoring` in `task.json`, and `judge` and `Trial` in `task.py`.
 | Run | What it does | Score |
 |---|---|---|
 | Dream-1, seed 1 | Run at 320 x 176, 1,000 steps | 0.0 |
-| Demo, seed 1 | The whole task | 1.0, at step 751 (37.6 s), 0.2 s outside the band |
+| Demo, seed 1 | The whole task, ending with both grippers lifted clear | 1.0, at step 744 (37.2 s), 0.2 s outside the band |
 | `check_score.py` | Best fixed aim and best of 440 steady sweeps, each on its luckiest of 100 schedules | 0: more than 12 s outside |
 | `check_score.py` | A press just after the belt starts | 0 |
+| `check_score.py` | Every 1.0 condition held for 1 s; held for 0.95 s | 1.0; 0.75 |
 
 ## Simplified
 
