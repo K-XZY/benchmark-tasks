@@ -102,6 +102,7 @@ class Trial:
         self.moved = None
         self.recent = []
         self.tube = 0.0
+        self.settled_s = 0.0  # how long the lever has stayed relaxed and still, with both grippers clear
         self.full, self.score = False, 0.0
 
     def step(self, env) -> None:
@@ -109,11 +110,14 @@ class Trial:
         st = m.state(env, "bender")
         bend = -st.deg("lever")
         local = st.to_local(m.fingertips(env))
-        self.update(bend, st.pos, st.tilt_deg(), local, self.steps * env.unwrapped.step_dt)
+        dt = env.unwrapped.step_dt
+        self.update(bend, st.pos, st.tilt_deg(), local, self.steps * dt, dt)
         m.set_target(env, "bender", "tube", -math.radians(self.tube))
 
-    def update(self, bend: float, pos: np.ndarray, tilt: float, local_tips: np.ndarray, t: float) -> None:
-        """The scorer, as a plain function of the lever's angle, the bender's pose and the fingertips in the bender's frame. `check_scorer.py` calls it on hand-built states."""
+    def update(self, bend: float, pos: np.ndarray, tilt: float, local_tips: np.ndarray, t: float, dt: float) -> None:
+        """The scorer, as a plain function of the lever's angle, the bender's pose and the fingertips in the bender's frame, called once a control step of dt seconds. `check_scorer.py` calls it on hand-built states.
+
+        Every score line needs the lever relaxed and still, with both grippers clear, for SUCCESS_HOLD_S without a break; the tube's set angle then picks the line."""
         if bend - self.back > self.set_angle:
             self.set_angle = bend - self.back
         self.tube = max(self.set_angle, bend)
@@ -128,10 +132,14 @@ class Trial:
         origin = np.array([0.0, 0.0, BAR_Z])
         gaps = min(segment_gap(local_tips, origin, origin + LEVER_L * _dir(bend)), segment_gap(local_tips, origin, origin + np.array([0.0, FORM_L, 0.0])))
         settled = bend <= RELAXED and still and gaps >= CLEAR
-        self.full = bool(settled and not self.too_far and not self.off_bench and abs(self.set_angle - TARGET) <= TOL)
-        if self.too_far or self.off_bench or not settled:
+        self.settled_s = self.settled_s + dt if settled else 0.0
+        in_band = abs(self.set_angle - TARGET) <= TOL
+        self.full = bool(settled and not self.too_far and not self.off_bench and in_band)
+        if self.too_far or self.off_bench or self.settled_s < SUCCESS_HOLD_S - 1e-6:
             self.score = 0.0
-        elif self.set_angle > TARGET + TOL or self.set_angle >= 80.0:
+        elif in_band:
+            self.score = 1.0
+        elif self.set_angle >= 80.0:
             self.score = 0.5
         elif self.set_angle >= PARTIAL_FROM:
             self.score = 0.25
@@ -145,12 +153,12 @@ m.on_reset(TRIAL.reset)
 
 
 def success(objects) -> bool:
-    """The tube set within 3 degrees of 90, with the lever relaxed and both grippers clear."""
+    """The tube set within 3 degrees of 90, with the lever relaxed and still and both grippers clear, at this step. The harness ends the trial once this has held for SUCCESS_HOLD_S."""
     return TRIAL.full
 
 
 def score(objects) -> float:
-    """Once the lever is relaxed and both grippers are clear: 0.25 from 70 degrees, 0.5 from 80 and over the band up to 96. 0 past 96 degrees or off the bench."""
+    """Once the lever has been relaxed and still, with both grippers clear, for 1 s: 1.0 with the tube in the band from 87 to 93 degrees; 0.5 from 80 to under 87, or over 93 up to 96; 0.25 from 70 to under 80. 0 before that second, under 70, past 96 degrees, or off the bench."""
     return TRIAL.score
 
 
