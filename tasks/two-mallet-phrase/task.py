@@ -1,4 +1,4 @@
-"""A glockenspiel in two groups of three bars, 40 cm apart, one group before each arm. A felt mallet lies in a cradle beside each group, and a printed card shows six coloured squares, read from the robot's left. The seed picks the card.
+"""A small xylophone in two groups of three bars, 40 cm apart, one group before each arm. A felt mallet lies in a cradle beside each group, and a printed card shows six coloured squares, read from the robot's left. The seed picks the card.
 
 Run a model:  inspect-robots run --embodiment yam_arena -E task=task.py -E object_jitter=0 -E control_hz=20 \\
            -E cam_width=320 -E cam_height=176 --scorer task_score --max-steps 400 --instruction "..."
