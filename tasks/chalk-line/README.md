@@ -37,6 +37,7 @@ See `scoring` in `task.json`, and `judge` and `Trial` in `task.py`.
 |---|---|---|
 | Dream-1 | Run at 320 x 176, 1,200 steps | 0.0 |
 | `full` | The whole task | 1.0, at step 375 (18.8 s), print 1.1 mm from the near mark |
+| `check_score.py` | Every 1.0 condition held for 1 s; held for 0.95 s | 1.0; 0.75 |
 | `check_score.py` | 8 mm off the near mark | 0.5 |
 | `check_score.py` | Two snaps; no snap; slack or sideways release; 2 cm off | 0 |
 

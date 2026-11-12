@@ -8,15 +8,18 @@ src = pathlib.Path(__file__).with_name("task.py").read_text()
 np = __import__("numpy")
 ns = {"np": np}
 for node in ast.parse(src).body:
-    if isinstance(node, ast.Assign) and any(n.id in ("GOOD_MISS", "FAIR_MISS", "RISE_MIN", "BOW_MAX", "REEL_R", "REEL_H") for t in node.targets for n in ast.walk(t) if isinstance(n, ast.Name)):
+    if isinstance(node, ast.Assign) and any(n.id in ("GOOD_MISS", "FAIR_MISS", "RISE_MIN", "BOW_MAX", "REEL_R", "REEL_H", "SUCCESS_HOLD_S", "HOLD_STEPS") for t in node.targets for n in ast.walk(t) if isinstance(n, ast.Name)):
         exec(ast.get_source_segment(src, node), ns)
     if isinstance(node, ast.FunctionDef) and node.name in ("judge", "release_outcome", "_on_reel"):
         exec("from __future__ import annotations\n" + ast.get_source_segment(src, node), ns)
 judge, release_outcome = ns["judge"], ns["release_outcome"]
+assert ns["HOLD_STEPS"] == round(ns["SUCCESS_HOLD_S"] * 20), "HOLD_STEPS must be SUCCESS_HOLD_S at 20 Hz"
 
-# (snaps, miss at the near mark in metres, bowed, reel parked, fingers clear, still), wanted (full, score)
+# (snaps, miss at the near mark in metres, bowed, reel parked, fingers clear, still[, steps the full state has held]), wanted (full, score)
 CASES = {
-    "one snap, 2 mm off, parked, clear": ((1, 0.002, False, True, True, True), (True, 0.75)),
+    "one snap, 2 mm off, parked, clear, still for 1 s": ((1, 0.002, False, True, True, True, 20), (True, 1.0)),
+    "one snap, 2 mm off, parked, clear, still for 3 s": ((1, 0.002, False, True, True, True, 60), (True, 1.0)),
+    "one snap, 2 mm off, parked, clear, still for 0.95 s": ((1, 0.002, False, True, True, True, 19), (True, 0.75)),
     "one snap, 2 mm off, reel still held": ((1, 0.002, False, False, False, True), (False, 0.75)),
     "one snap, 8 mm off, parked, clear": ((1, 0.008, False, True, True, True), (False, 0.5)),
     "one snap, 2 cm off": ((1, 0.02, False, True, True, True), (False, 0.0)),

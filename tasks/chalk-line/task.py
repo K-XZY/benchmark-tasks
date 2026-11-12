@@ -25,6 +25,7 @@ SCENE = "station"
 INSTRUCTION = "Snap a chalk line between the two marks. The hook is on the far nail. Pull the reel to the near mark and hold the line taut across both marks, then lift the line straight up at its middle and let it go. Put the reel on its rest."
 SUCCESS_HOLD_S = 1.0
 SCORE_OVER = "end"
+HOLD_STEPS = 20  # SUCCESS_HOLD_S at 20 Hz: the harness ends the trial with 1.0 once success() has held this many control steps
 TOP = d.TABLE_TOP
 
 LOOKS = {
@@ -141,13 +142,16 @@ def _place(path: str, a, b) -> None:
     op.Set(Gf.Matrix4d(*[float(v) for v in _frame(np.asarray(a, float) - top, np.asarray(b, float) - top).reshape(-1)]))
 
 
-def judge(snaps: int, miss: float, bowed: bool, parked: bool, clear: bool, still: bool) -> tuple[bool, float]:
-    """The score now: (full, score). `miss`: how far the print passes from the near mark, in metres. Run on hand-built states by check_score.py."""
+def judge(snaps: int, miss: float, bowed: bool, parked: bool, clear: bool, still: bool, held_steps: int = HOLD_STEPS) -> tuple[bool, float]:
+    """The score now: (full, score). `miss`: how far the print passes from the near mark, in metres.
+    full: every 1.0 condition holds at this step. held_steps: for how many control steps they have held, this one included.
+    The score is 1.0 once they have held for SUCCESS_HOLD_S, and the lower score of the text until then. Run on hand-built states by check_score.py."""
     if snaps != 1 or bowed or miss > FAIR_MISS:
         return False, 0.0
     if miss > GOOD_MISS:
         return False, 0.5
-    return bool(parked and clear and still), 0.75
+    full = bool(parked and clear and still)
+    return full, 1.0 if full and held_steps >= HOLD_STEPS else 0.75
 
 
 def _on_reel(fingers: np.ndarray, reel_pos: np.ndarray) -> bool:
@@ -176,6 +180,7 @@ class Trial:
         self.bowed = False
         self.taut = False
         self.full, self.score = False, 0.0
+        self.full_steps = 0  # control steps the full state has lasted
         if env is not None:
             m.set_visible(f"{m.ENV_PATH}/line_board/visual/print", False)
             self.step(env)
@@ -236,7 +241,10 @@ class Trial:
         rest = np.array([*REST_AT, TOP + REST_H])
         parked = bool(np.linalg.norm(reel.pos - rest) <= 0.03 and reel.tilt_deg() <= 10.0)
         near = np.linalg.norm(all_tips - (reel.pos + [0.0, 0.0, REEL_H / 2]), axis=1).min() - REEL_R
-        self.full, self.score = judge(self.snaps, self.miss, self.bowed, parked, bool(near >= CLEAR), reel.resting())
+        self.full, self.score = judge(self.snaps, self.miss, self.bowed, parked, bool(near >= CLEAR), reel.resting(), self.full_steps + 1)
+        self.full_steps = self.full_steps + 1 if self.full else 0
+        if self.full_steps == HOLD_STEPS:
+            print(f"[chalk] full state held {HOLD_STEPS * d.DT:.2f} s: score {self.score}", flush=True)
 
 
 TRIAL = Trial()
@@ -251,6 +259,7 @@ def success(objects) -> bool:
 
 
 def score(objects) -> float:
+    """1.0 once the full state has held for SUCCESS_HOLD_S; otherwise the lower score of the scoring text for the state."""
     return TRIAL.score
 
 
