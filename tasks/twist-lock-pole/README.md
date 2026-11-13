@@ -1,4 +1,4 @@
-# Turn a loose twist-lock extension pole's inner tube against the outer to free its cam, draw it to the red mark, and turn it back to lock it hard enough to carry a 50 N push
+# Counter-twist a loose twist-lock pole's tubes to free its cam, draw it to the red mark, and lock it for a 50 N push
 
 A twist-lock extension pole lies loose on the table, collapsed and locked. The robot sets it to the red mark on its inner tube and locks it, so it carries a 50 N push along its length.
 
