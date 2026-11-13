@@ -1,4 +1,4 @@
-# Slit a taped carton's 40 cm seam with a box cutter, short of the product 6 mm below and cutting nothing else, then draw the blade back in
+# Slit a taped carton's 40 cm seam with a box cutter, short of the product 6 mm below, then draw the blade back in
 
 The knife starts with its blade concealed in the handle. The robot pushes the blade out on its slider, slits a taped carton's seam from one top edge to the other so both flaps come free, without the blade reaching the product packed 6 mm under the tape or cutting the carton beside the seam, then draws the blade back in.
 
