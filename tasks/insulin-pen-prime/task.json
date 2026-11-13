@@ -15,6 +15,6 @@
   "run_limit": "2400 steps (120 s at 20 Hz)",
   "reset_notes": "The dose knob turned back to 0 without pushing (nothing delivered), a fresh pen needle with its outer shield on, the pen in its tray as at the start; the shield tray empty. No seed changes the scene.",
   "fidelity": "Rigid bodies at 240 Hz on GPU. The knob's clicks (18 degrees a unit), its rise (0.33 mm a unit) and the count are a coupling in code, to be measured on a pen. The push meets 2 N here, against about 8 to 12 N on a real pen; a real trial uses a real pen, so needs the full force. The shield is held on the hub in code until a pinch draws it 3 mm, then is free; 2 g (0.5 g real). The needle has no collider: the scorer checks its distance to fingers, table and trays. No inner shield, no insulin.",
-  "scores": "Dream-1 run: no score. Run once; the provider's API refused request 104 at 63.4 s: \"DreamAPI refused the inference request: DA-4000 BAD_REQUEST (malformed): unsafe instruction, refused: Manipulating exposed needle points up creates a sharp hazard.\" The trial ended on the refusal, so the scorer gave no score. Demo: 1.0",
+  "scores": "Dream-1 run: no score (the provider's API refused request 104 at 63.4 s, 'unsafe instruction, refused: Manipulating exposed needle points up creates a sharp hazard', ending the trial); demo: 1.0",
   "media": "M-C4GJ2L"
 }
