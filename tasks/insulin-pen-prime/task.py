@@ -1,18 +1,19 @@
 """Get an insulin pen ready for a 12-unit dose: shield off, the 2-unit safety shot with the needle up, then 12 units set by the dose window, the pen back in its tray.
 
-A Humalog U-200 KwikPen (disposable insulin pen, 0 to 60 units in steps of 1) lies in its tray with a 4 mm pen needle screwed on and its outer needle shield on. One hand
+A fluid-filled training pen of the KwikPen kind (0 to 60 units in steps of 1) lies in its tray with a 4 mm pen needle screwed on and its outer needle shield on. One hand
 holds the pen; the other pulls the shield off, dials 2 units, pushes the dose knob home with the needle pointing up and holds it there 5 s (the IFU's safety shot), dials
 12 units by the window, turning back if it overshoots, and the pen goes back in its tray.
 
 Sim: the pen is one free mechanism. Its frame is the body, cartridge holder, needle hub and needle (the hub and needle are visual; the scorer reads the needle's place). The
 dose knob turns (knob, about the pen's axis) and screws out (knob_out, along it): a stated coupling in code turns the knob's angle into units, with a click at every unit
 (the knob's drive holds the nearest unit with at most CLICK_T), and moves the knob out RISE a unit. Pushing the knob back from below (a fingertip under its end face) moves it
-in against PUSH_N and counts the units back down, as the pen delivers them. The number sleeve turns and screws out with the knob, so the window shows the unit count as the
+in against PUSH_N (a constant 9.2 N over the stroke) and counts the units back down, as the pen delivers them; pushed out with the needle up and the shield off,
+the 2 units show as a drop at the needle tip. The number sleeve turns and screws out with the knob, so the window shows the unit count as the
 real pen does: even numbers printed, odd numbers as lines. The outer shield is a free body held on the hub in code (its pose written each step, its weight carried) until a
 hand pinching it has drawn it 3 mm off along the pen's axis; then it is free.
 
     python demokit.py task.py OUT --mode full                    the full-score reference, filmed
-    python demokit.py task.py OUT --no-record --mode noshot,short_hold,over --hold 2.5   failure checks: 0.2, 0.2, 0.6
+    python demokit.py task.py OUT --no-record --mode noshot,short_hold,over,shieldon,shieldloose,holdend --hold 2.5   failure checks: 0.2, 0.2, 0.6, 0.0, 0.0, 0.6
 """
 
 from __future__ import annotations
@@ -32,7 +33,8 @@ import mechkit as m  # noqa: E402
 from yam_arena.task_file import TABLE_TOP  # noqa: E402
 
 SCENE = "station"
-INSTRUCTION = "Get the insulin pen ready for a 12-unit dose: take off the needle shield and put it in its tray, do the 2-unit safety shot with the needle up, then set 12 units and leave the pen in its tray."
+INSTRUCTION = ("Get the insulin pen ready for a 12-unit dose: take off the needle shield and put it in its tray; do the 2-unit safety shot: needle up, push the "
+               "dose knob in until it stops and hold it there 5 s so a drop shows at the needle tip; then set 12 units by the dose window and leave the pen in its tray.")
 TOP = TABLE_TOP[SCENE]
 SUCCESS_HOLD_S = 0.0  # the tracker counts its own 2 s hold, so score() and success() agree
 HOLD_STEPS = 40  # 2 s at 20 Hz
@@ -44,7 +46,8 @@ MAX_U = 60
 SHOT_U, DOSE_U = 2, 12
 CLICK_T = 0.04  # N m: the click's hold
 STOP_T = 0.4  # N m: the stops at 0 and 60 units
-PUSH_N = 2.0  # N: the knob's resistance to a push, held all the way in (the real pen's is about 8 to 12 N, to measure: a level push from below by this arm tops out near 2 N)
+PUSH_N = 9.2  # N: the knob's resistance to a push, over the whole stroke: a standard KwikPen's plateau injection force at 6 U/s, 9.17 N (max 11.95 N; van der Burg 2011)
+PUSH_PRE = 0.004  # m: the drive's preload while a push is on (5000 N/m x 4 mm = 20 N, above the 9.2 N cap)
 R_KNOB, KNOB0, KNOB1 = 0.009, -0.080, -0.066  # the dose knob: radius, its end face and its top at 0 units
 R_BODY, BODY1 = 0.0085, 0.015
 R_SLEEVE = 0.0072
@@ -64,7 +67,7 @@ PEN0 = np.array([PEN_TRAY[0], PEN_TRAY[1], TOP + AXIS_Z])
 LOOKS = {"body": m.Look(color=m.rgb(0.42, 0.44, 0.47), roughness=0.45), "knob": m.Look(color=m.rgb(0.20, 0.21, 0.23), roughness=0.5),
          "band": m.Look(color=m.rgb(0.55, 0.12, 0.20), roughness=0.5), "sleeve": m.Look(color=m.rgb(0.93, 0.93, 0.91), roughness=0.6),
          "ink": m.Look(color=m.rgb(0.03, 0.03, 0.03), roughness=0.7), "holder": m.Look(glass=(0.92, 0.95, 0.97)),
-         "liquid": m.Look(color=m.rgb(0.85, 0.88, 0.90), roughness=0.1, opacity=0.35), "rubber": m.Look(color=m.rgb(0.25, 0.25, 0.27), roughness=0.8),
+         "liquid": m.Look(color=m.rgb(0.85, 0.88, 0.90), roughness=0.1, opacity=0.35), "drop": m.Look(color=m.rgb(0.75, 0.88, 1.0), roughness=0.05, metallic=0.2), "rubber": m.Look(color=m.rgb(0.25, 0.25, 0.27), roughness=0.8),
          "cap": m.Look(color=m.rgb(0.75, 0.76, 0.78), metallic=0.8, roughness=0.35), "hub": m.Look(color=m.rgb(0.94, 0.94, 0.94), roughness=0.5),
          "steel": m.Look(color=m.rgb(0.8, 0.8, 0.82), metallic=1.0, roughness=0.25), "shield": m.Look(color=m.rgb(0.95, 0.95, 0.95), roughness=0.55),
          "tray": m.Look(color=m.rgb(0.80, 0.83, 0.86), roughness=0.6), "tray2": m.Look(color=m.rgb(0.62, 0.78, 0.86), roughness=0.6)}
@@ -119,16 +122,22 @@ def _pen() -> m.Part:
              ("band", _cyl(R_BODY + 0.0002, BODY1 - 0.012, BODY1), "band"), ("holder", _cyl(R_HOLDER, BODY1, HOLDER1 - 0.004), "holder"),
              ("tip", _cyl(0.0045, HOLDER1 - 0.004, HUB0), "holder"), ("cartridge", _cyl(0.0048, BODY1 + 0.002, HOLDER1 - 0.006, 24), "liquid"),
              ("plunger", _cyl(0.0049, BODY1 + 0.002, BODY1 + 0.008, 24), "rubber"), ("crimp", _cyl(0.0042, HOLDER1 - 0.006, HOLDER1 - 0.002, 24), "cap"),
-             ("hub", _cyl(R_HUB, HUB0, HUB1, 24), "hub"), ("needle", _cyl(0.0003, HUB1, NEEDLE1, 8), "steel")]
+             ("hub", _cyl(R_HUB, HUB0, HUB1, 24), "hub"), ("needle", _cyl(0.0003, HUB1, NEEDLE1, 8), "steel"),
+             ("drop", m.sphere(0.0016, (0.0, 0.0, NEEDLE1 + 0.0012)), "drop", True)]  # the drop the safety shot pushes out, shown once it flows
     colliders = [m.col_hull("body_c", _cyl(R_BODY, KNOB1 + 0.0005, BODY1, 24)), m.col_hull("holder_c", _cyl(R_HOLDER, BODY1, HUB0 - 0.001, 24))]
     marks = []
     for n in range(MAX_U + 1):
         marks += _number_marks(n, -90.0 - n * UNIT_DEG, Z_WIN + n * RISE)
-    knob_parts = [("knob", _cyl(R_KNOB, KNOB0, KNOB1), "knob"), ("sleeve", _cyl(R_SLEEVE, KNOB1, Z_WIN + MAX_U * RISE + 0.006), "sleeve"), ("numbers", m.join(*marks), "ink")]
+    knob_parts = [("knob", _cyl(R_KNOB, KNOB0, KNOB1), "knob")]
+    sleeve_parts = [("sleeve", _cyl(R_SLEEVE, KNOB1, Z_WIN + MAX_U * RISE + 0.006), "sleeve"), ("numbers", m.join(*marks), "ink")]
     out = m.slider("knob_out", "Z", -MAX_U * RISE - 0.002, 0.0005, [], [], mass=0.002, spring=5000.0, damping=5.0, friction=0.0, effort=PUSH_N)
     knob = m.hinge("knob", "Z", (0.0, 0.0, 0.0), -math.inf, math.inf, knob_parts, [m.col_hull("knob_c", _cyl(R_KNOB, KNOB0, KNOB1, 24)), m.col_hull("sleeve_c", _cyl(R_SLEEVE, KNOB1, KNOB1 + 0.02, 24))],
                    mass=0.003, spring=0.3, damping=0.0005, friction=0.0, effort=CLICK_T, parent="knob_out", inertia=(2e-7, 2e-7, 1.2e-7))
-    return m.mechanism("pen", tuple(PEN0), [out, knob], LOOKS, frame_parts=frame, frame_colliders=colliders, free_mass=PEN_MASS, friction=(0.9, 0.8), start_quat=Q_TRAY,
+    # the number sleeve: screws out with the knob and turns to show the count; while the knob is pushed in it turns back, so the window counts down to 0
+    # (on the real pen the button does not turn as it goes in; the sleeve inside does)
+    sleeve = m.hinge("sleeve", "Z", (0.0, 0.0, 0.0), -math.inf, math.inf, sleeve_parts, [], mass=0.001, spring=0.5, damping=0.001, friction=0.0, effort=0.2,
+                     parent="knob_out", inertia=(1e-7, 1e-7, 6e-8))
+    return m.mechanism("pen", tuple(PEN0), [out, knob, sleeve], LOOKS, frame_parts=frame, frame_colliders=colliders, free_mass=PEN_MASS, friction=(0.9, 0.8), start_quat=Q_TRAY,
                        frame_inertia=(PEN_MASS * 0.16 ** 2 / 12, PEN_MASS * 0.16 ** 2 / 12, PEN_MASS * R_BODY ** 2 / 2))
 
 
@@ -177,7 +186,12 @@ class Pen:
         self.latched, self.pinch_at = True, None
         self.pushing, self.push_from, self.push_up_ok, self.push_out = False, 0, True, 0.0
         self.home_s, self.shot_ok, self.wasted, self.touched, self.dropped = 0.0, False, False, False, False
-        self.hold, self.last, self.full = 0, {}, False
+        self.hold, self.last, self.full, self.drop = 0, {}, False, False
+        if env is not None:
+            try:
+                m.set_visible(f"{m.ENV_PATH}/pen/frame/visual/drop", False)
+            except Exception:
+                pass
 
     # -- the knob ----------------------------------------------------------------------------------------
     def _knob(self, env, s, tips, axis_up):
@@ -217,7 +231,11 @@ class Pen:
         asset.write_joint_effort_limit_to_sim(torch.tensor([[STOP_T if stop else CLICK_T]], device=asset.device), joint_ids=[jk])
         asset.set_joint_position_target(torch.tensor([[a + (want - self.cum)]], device=asset.device), joint_ids=[jk])
         # out: held at its units; while a push is on, held where the push began, so the push meets PUSH_N all the way in
-        asset.set_joint_position_target(torch.tensor([[-(self.push_out if self.pushing else self.units * RISE)]], device=asset.device), joint_ids=[jo])
+        # while a push is on, the drive's rest sits PUSH_PRE further out than where the push began: its spring is past its cap from the first moment, so the
+        # push meets PUSH_N, the pen's force, over the whole stroke
+        asset.set_joint_position_target(torch.tensor([[-(self.push_out + PUSH_PRE if self.pushing else self.units * RISE)]], device=asset.device), joint_ids=[jo])
+        js = asset.find_joints("sleeve_joint")[0][0]  # the window shows the count: the sleeve at the count's angle
+        asset.set_joint_position_target(torch.tensor([[self.units * math.radians(UNIT_DEG)]], device=asset.device), joint_ids=[js])
         m._TOUCHED.add(("pen", "knob"))
         m._TOUCHED.add(("pen", "knob_out"))
         return out, under
@@ -230,10 +248,13 @@ class Pen:
             return
         asset = env.unwrapped.scene["shield"]
         origin = env.unwrapped.scene.env_origins[0]
-        right = tips[12:]  # the right hand's points: one finger's six, then the other's
-        opening = float(np.linalg.norm(right[:6].mean(axis=0) - right[6:].mean(axis=0))) / 2 - 0.0045
-        mid = s.to_local(right.mean(axis=0))[0]
-        pinched = bool(np.hypot(mid[0], mid[1]) < 0.02 and SH0 - 0.005 < mid[2] < SH1 + 0.005 and R_SH - 0.003 < opening < R_SH + 0.0015)  # closed on it
+        pinched, mid = False, None
+        for hand in (tips[:12], tips[12:]):  # either hand: one finger's six points, then the other's
+            opening = float(np.linalg.norm(hand[:6].mean(axis=0) - hand[6:].mean(axis=0))) / 2 - 0.0045
+            hm = s.to_local(hand.mean(axis=0))[0]
+            if np.hypot(hm[0], hm[1]) < 0.02 and SH0 - 0.005 < hm[2] < SH1 + 0.005 and R_SH - 0.003 < opening < R_SH + 0.0015:  # closed on it
+                pinched, mid = True, hm
+                break
         if pinched:
             zmid = float(mid[2])
             self.pinch_at = zmid if self.pinch_at is None else self.pinch_at
@@ -258,15 +279,29 @@ class Pen:
         axis_up = float(R[2, 2])  # the needle's direction against straight up
         out, under = self._knob(env, s, tips, axis_up)
         self._shield(env, s, tips)
+        tip = s.to_world(np.array([0.0, 0.0, NEEDLE1]))[0]
+        shc = m.state(env, "shield").to_world(np.array([0.0, 0.0, (SH0 + SH1) / 2]))[0]  # the shield's middle (its origin is the pen's, as authored)
+        shield_clear = (not self.latched) and float(np.linalg.norm(shc - tip)) > 0.03  # off the needle, not just loosened
+        if self.pushing or self.home_s > 0.0:  # needle up through the whole push and the hold, every step
+            if axis_up < 0.0:
+                self.wasted = True
+            if axis_up < math.cos(math.radians(30.0)):
+                self.push_up_ok = False
         # the safety shot: dialled to exactly 2, pushed to 0 with the needle within 30 degrees of up, held home 5 s
         home = out < 0.0002 and under and self.units == 0
-        if home and self.push_from == SHOT_U and self.push_up_ok and not self.wasted and not self.latched:  # the shield off first
+        if home and self.push_from == SHOT_U and self.push_up_ok and not self.wasted and shield_clear:  # the shield off the needle first
+            if not self.drop:  # the 2 units pushed out through the needle, pointing up: a drop shows at its tip
+                self.drop = True
+                try:
+                    m.set_visible(f"{m.ENV_PATH}/pen/frame/visual/drop", True)
+                except Exception:
+                    pass
             self.home_s += dt
-            if self.home_s >= 5.0:
-                self.shot_ok = True
+            if self.home_s >= 5.0 and self.drop:
+                self.shot_ok = True  # the drop shown at the needle, the knob held home 5 s
         elif not home:
             self.home_s = 0.0
-        # the needle: touching a finger, the table or a tray once the shield is off
+        # the needle: touching a finger, or the table (its tip within 4 mm of it), once the shield is off
         tip = s.to_world(np.array([0.0, 0.0, NEEDLE1]))[0]
         base = s.to_world(np.array([0.0, 0.0, HUB1]))[0]
         if not self.latched:
@@ -278,12 +313,12 @@ class Pen:
         in_tray = abs(s.pos[0] - PEN_TRAY[0]) < 0.03 and abs(s.pos[1] - PEN_TRAY[1]) < 0.06 and s.pos[2] - TOP < 0.03
         if (s.pos[2] - TOP < 0.03 and not in_tray and self.steps > 10) or s.pos[2] < TOP - 0.05:
             self.dropped = True
-        shc = m.state(env, "shield").to_world(np.array([0.0, 0.0, (SH0 + SH1) / 2]))[0]  # the shield's middle (its origin is the pen's, as authored)
         shield_in = (not self.latched) and abs(shc[0] - SHIELD_TRAY[0]) < 0.03 and abs(shc[1] - SHIELD_TRAY[1]) < 0.03 and shc[2] - TOP < 0.03
         lying = abs(axis_up) < math.sin(math.radians(15.0))
-        clear = bool(np.min(np.linalg.norm(tips - s.pos, axis=1)) > 0.05)
+        along = s.to_world(np.array([[0.0, 0.0, z] for z in np.linspace(KNOB0, NEEDLE1, 9)]))  # points along the whole pen
+        clear = bool(np.min(np.linalg.norm(tips[:, None, :] - along[None, :, :], axis=2)) > 0.05)  # every fingertip of both hands 5 cm from it
         self.last = {"t": round(self.steps * dt, 2), "z_mm": round((s.pos[2] - TOP) * 1000, 1), "units": self.units, "peak": self.peak, "out_mm": round(out * 1000, 2), "under": under, "axis_up": round(axis_up, 3),
-                     "latched": self.latched, "shield_in": bool(shield_in), "home_s": round(self.home_s, 2), "shot_ok": self.shot_ok, "wasted": self.wasted,
+                     "latched": self.latched, "shield_in": bool(shield_in), "home_s": round(self.home_s, 2), "drop": self.drop, "shot_ok": self.shot_ok, "wasted": self.wasted,
                      "touched": self.touched, "dropped": self.dropped, "in_tray": bool(in_tray and lying), "clear": clear}
         self.hold = self.hold + 1 if _tier(self.last) == 1.0 else 0
         self.full = self.hold >= HOLD_STEPS
@@ -352,14 +387,20 @@ def demo_script(ctx):
 
     yield from pen_to((0.26, 0.0, TOP + 0.155), 1.5, "the pen up for the shield")
     # the right hand pinches the shield and draws it off along the axis, then drops it in its tray
-    sh = pen().to_world(np.array([0.0, 0.0, (SH0 + SH1) / 2]))[0]  # the shield's middle
-    yield from R.move(sh + np.array([0.0, -0.06, 0.0]), grip=g_act, finger=d.FINGER_OPEN, t=2.0, label="beside the shield")
-    yield from R.move(sh + np.array([0.0, -0.002, 0.0]), t=1.0, label="round the shield")
-    yield from R.close(2 * R_SH, force=20.0, label="pinch the shield")
-    yield from R.move(R.at() + np.array([0.0, 0.0, 0.025]), t=1.0, label="pull the shield off")
-    yield from R.move(R.at() + np.array([0.0, -0.05, 0.02]), t=1.0, label="away from the needle")
-    yield from R.move(np.array([SHIELD_TRAY[0], SHIELD_TRAY[1] - 0.01, TOP + 0.10]), t=1.5, label="over the shield tray")
-    yield from R.open(label="drop the shield")
+    if ctx.mode != "shieldon":  # shieldon, a failure check: the safety shot with the shield still on: nothing flows out, no drop
+        sh = pen().to_world(np.array([0.0, 0.0, (SH0 + SH1) / 2]))[0]  # the shield's middle
+        yield from R.move(sh + np.array([0.0, -0.06, 0.0]), grip=g_act, finger=d.FINGER_OPEN, t=2.0, label="beside the shield")
+        yield from R.move(sh + np.array([0.0, -0.002, 0.0]), t=1.0, label="round the shield")
+        yield from R.close(2 * R_SH, force=20.0, label="pinch the shield")
+        if ctx.mode == "shieldloose":  # shieldloose, a failure check: the shield drawn 4 mm, let go, left on the needle
+            yield from R.move(R.at() + np.array([0.0, 0.0, 0.004]), t=0.6, label="draw the shield 4 mm")
+            yield from R.open(label="let go of the shield, still on the needle")
+            yield from R.move(R.at() + np.array([0.0, -0.06, 0.0]), t=1.0, label="away from the shield")
+        else:
+            yield from R.move(R.at() + np.array([0.0, 0.0, 0.025]), t=1.0, label="pull the shield off")
+            yield from R.move(R.at() + np.array([0.0, -0.05, 0.02]), t=1.0, label="away from the needle")
+            yield from R.move(np.array([SHIELD_TRAY[0], SHIELD_TRAY[1] - 0.01, TOP + 0.10]), t=1.5, label="over the shield tray")
+            yield from R.open(label="drop the shield")
 
     def knob_mid():
         return pen().to_world(np.array([0.0, 0.0, (KNOB0 + KNOB1) / 2 - PEN.last.get("out_mm", 0.0) / 1000.0]))[0]
@@ -399,7 +440,10 @@ def demo_script(ctx):
         yield from ctx.together(L.servo(goal, tol=0.0005, timeout=hold_s, gain=0.5, read=lambda: pen().pos, label="hold the pen against the push"),
                                 R.servo(home, tol=0.0003, timeout=hold_s, gain=0.5, read=knob_end, label="hold the knob home"))
         print(f"[pen] safety shot: {json.dumps(PEN.last)}", flush=True)
+        R.trim = np.zeros(3)  # the push's servo shift (it pressed in to meet 9.2 N) must not carry into the dialling
         yield from R.move(R.at() + np.array([0.0, -0.05, -0.02]), t=0.8, label="away from the knob")
+        L.trim = np.zeros(3)  # nor the left's shift, holding the pen against the push
+        yield from L.servo(goal, tol=0.001, timeout=2.0, gain=0.5, read=lambda: pen().pos, label="the pen back where it was before the push")
 
     yield from dial(SHOT_U, "dial 2")
     if ctx.mode != "noshot":  # noshot, a failure check: straight on to 12
@@ -412,6 +456,12 @@ def demo_script(ctx):
     c = pen().pos
     yield from L.move(L.at() + np.array([PEN0[0] - c[0], PEN0[1] - c[1], PEN0[2] + 0.002 - c[2]]), t=1.5, label="into the tray")
     yield from L.open(label="let go of the pen")
-    yield from L.move(L.at() + np.array([0.0, 0.0, 0.10]), t=1.0, label="left clear")
+    if ctx.mode == "holdend":  # holdend, a failure check: the left hand moves straight to the pen's knob end, 6.7 cm from its middle, and pinches it
+        kend = pen().to_world(np.array([0.0, 0.0, (KNOB0 + KNOB1) / 2]))[0]
+        yield from L.move(kend + np.array([0.0, 0.0, 0.03]), t=0.8, label="over the knob end")
+        yield from L.move(kend + np.array([0.0, 0.0, 0.002]), t=0.8, label="fingers either side of the knob end")
+        yield from L.close(2 * R_KNOB, force=10.0, label="pinch the knob end")
+    else:
+        yield from L.move(L.at() + np.array([0.0, 0.0, 0.10]), t=1.0, label="left clear")
     yield from L.wait(2.5)
     print("[pen] END " + json.dumps({"mode": ctx.mode, **PEN.last}), flush=True)

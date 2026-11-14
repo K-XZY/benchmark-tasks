@@ -1,6 +1,41 @@
-"""The scorer's table on hand-built records, with no simulator: python check_score.py (needs yam_arena importable)."""
+"""The scorer's table on hand-built records, with no simulator: python check_score.py"""
+import importlib.util
+import pathlib
+import sys
+import types
 
-import task as T
+# task.py imports the simulator's modules at import time; the scoring table (_tier, score) needs none of them
+for name in ("demokit", "mechkit", "yam_arena", "yam_arena.task_file"):
+    sys.modules[name] = types.ModuleType(name)
+sys.modules["yam_arena.task_file"].TABLE_TOP = {"station": 0.0}
+mk = sys.modules["mechkit"]
+mk.Look = lambda **kw: kw
+mk.rgb = lambda *a: a
+class _Any:
+    """Stands in for any mesh or part the scene builds at import."""
+    def __getattr__(self, name):
+        return self
+    def __call__(self, *a, **kw):
+        return self
+    def __iter__(self):
+        return iter(())
+for fn in ("Mesh", "box", "cylinder", "sphere", "lathe", "prism", "join", "tube", "col_box", "col_cylinder", "col_hull", "slider", "hinge", "mechanism", "free",
+           "fixed", "on_step", "on_reset"):
+    setattr(mk, fn, _Any())
+
+
+def _quat_matrix(q):
+    import numpy as np
+    x, y, z, w = q
+    return np.array([[1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)], [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+                     [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)]])
+
+
+mk.quat_matrix = _quat_matrix
+mk.ENV_PATH = "/World/envs/env_0"
+spec = importlib.util.spec_from_file_location("task", pathlib.Path(__file__).with_name("task.py"))
+T = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(T)
 
 base = {"units": 12, "shield_in": True, "shot_ok": True, "wasted": False, "touched": False, "dropped": False, "in_tray": True, "clear": True}
 cases = [
