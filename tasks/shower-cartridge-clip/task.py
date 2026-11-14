@@ -254,6 +254,22 @@ def _trace(env) -> None:
 m.on_step(_trace)
 
 
+LEG_TIPS = np.array([[0.0, sg * LEG_Y, -LEG_L] for sg in (1.0, -1.0)])  # the legs' tips in the clip's frame: left, right
+
+
+def legs(k) -> dict:
+    """Where the clip's legs are against their slots: each tip inside its own slot's outline (across the slot within 0.8 mm, along the face within 2 mm
+    of the slot's line), and how far it stands over its stop; and the clip's turn off square (its legs' line against the face's)."""
+    tips = k.to_world(LEG_TIPS)
+    inside, over = [], []
+    for tip, sg in zip(tips, (1.0, -1.0)):
+        inside.append(bool(SLOT[0] - 0.0008 <= tip[0] <= SLOT[1] + 0.0008 and abs(tip[1] - (VY + sg * LEG_Y)) < 0.002))
+        over.append(float(tip[2] - (TOP + LUG_BOT)))
+    across = k.rotation()[:, 1]  # the clip's crossbar runs along its y
+    skew = float(np.degrees(np.arccos(np.clip(abs(across[1]), -1.0, 1.0))))
+    return {"inside": inside, "over_stop": over, "skew": skew}
+
+
 def state_now(env) -> dict:
     st = m.state(env, "valve")
     k = m.state(env, "clip")
@@ -261,12 +277,14 @@ def state_now(env) -> dict:
     roll = st.deg("roll")
     pitch = 0.0
     cp = cart_pos(st)
-    clip_down = abs(k.pos[0] - (SLOT[0] + SLOT[1]) / 2) < 0.002 and abs(k.pos[1] - VY) < 0.003 and (k.pos[2] - TOP) < LUG_BOT + LEG_L + 0.004
+    lg = legs(k)
+    entered = all(lg["inside"]) and all(-0.0005 < z < LUG_TOP - LUG_BOT for z in lg["over_stop"])  # both legs in their own slots: under the lugs' tops, over their stops
+    clip_down = entered and all(z < 0.0015 for z in lg["over_stop"]) and lg["skew"] < 5.0 and k.tilt_deg() < 5.0  # both on their stops, square
     tips = m.fingertips(env)
     hands = min(float(np.min(np.linalg.norm(tips - pt, axis=1))) for pt in (cp, cp - np.array([STEM_L, 0.0, 0.0])))  # off the ears and the stem's end
     hands = min(hands, float(np.min(np.linalg.norm(tips - k.pos, axis=1))))
     return {"depth": d, "roll": roll, "pitch": pitch, "flush": d > -0.0005 and abs(roll) < 3.0, "home": d > -0.001 and abs(roll) < 3.0, "clip_down": bool(clip_down), "clip_z": float(k.pos[2] - TOP),
-            "clip_started": bool(abs(k.pos[0] - (SLOT[0] + SLOT[1]) / 2) < 0.002 and (k.pos[2] - TOP) < LUG_TOP + LEG_L), "hands": hands,
+            "clip_started": bool(entered), "legs": lg, "hands": hands,
             "dropped": bool(k.pos[2] < TOP + 0.02),
             "speed": float(abs(st.joint_vel.get("slide_joint", 0.0))) if hasattr(st, "joint_vel") else 0.0}
 
@@ -279,11 +297,13 @@ class Trial:
         self.now = None
         self.hold, self.full = 0, False  # consecutive steps in the full state; any break starts it again
         self.ever_flush, self.ever_started = False, False  # real progress, for the 0.25 tier
+        self.dropped = False  # the clip on the table at any moment: a failure for the whole trial
 
     def step(self, env):
         self.now = state_now(env)
         self.ever_flush = self.ever_flush or self.now["flush"]
         self.ever_started = self.ever_started or self.now["clip_started"]
+        self.dropped = self.dropped or self.now["dropped"]
         ready = _full(self.now)
         stem = cart_pos(m.state(env, "valve")) - np.array([STEM_L, 0.0, 0.0])
         m.push(env, "valve", (-PULL_N if ready else 0.0, 0.0, 0.0), at=stem, body="roll")  # the plumber's tug: 20 N outward on the stem through the hold
@@ -300,7 +320,7 @@ m.on_reset(TRIAL.reset)
 def _full(s):
     """Pushed flush at some moment (within 0.5 mm), and now the clip down, the cartridge held home within 1 mm (under the scorer's pull a clip's play lets it
     come out a little), still, and the hands clear."""
-    return TRIAL.ever_flush and s["home"] and s["clip_down"] and s["hands"] > 0.03 and s["speed"] < 0.01
+    return TRIAL.ever_flush and not TRIAL.dropped and s["home"] and s["clip_down"] and s["hands"] > 0.03 and s["speed"] < 0.01
 
 
 def success(objects) -> bool:
@@ -309,7 +329,7 @@ def success(objects) -> bool:
 
 def score(objects) -> float:
     s = TRIAL.now
-    if s is None or s["dropped"]:
+    if s is None or TRIAL.dropped:
         return 0.0
     if TRIAL.ever_flush and s["home"] and s["clip_down"]:
         return 1.0 if TRIAL.full else 0.5  # the full state not yet held 1 s scores 0.5
@@ -323,6 +343,7 @@ def _report(ctx, env, label=""):
     k = m.state(env, "clip")
     print(f"[valve] t {ctx.t:4.1f} {label}cartridge {1000 * s['depth']:+6.1f} mm from home, roll {s['roll']:+5.1f} deg, flush {s['flush']}; clip at x {1000 * (k.pos[0] - (SLOT[0] + SLOT[1]) / 2):+.1f} "
           f"y {1000 * (k.pos[1] - VY):+.1f} mm from the slots, tilt {k.tilt_deg():.1f}, bar {1000 * s['clip_z']:.0f} mm up, "
+          f"legs in their slots {s['legs']['inside']}, over their stops {np.round(1000 * np.array(s['legs']['over_stop']), 1)} mm, skew {s['legs']['skew']:.1f}; "
           f"down {s['clip_down']}; hands {1000 * s['hands']:.0f} mm off; speed {s['speed']:.4f}; pulled {TRIAL.now.get('pulled') if TRIAL.now else None}, held {TRIAL.hold}; score {score(None):.2f}", flush=True)
 
 
@@ -350,8 +371,8 @@ def demo_script(ctx):
             yield
         _report(ctx, env, "idle: ")
         return
-    if ctx.mode == "proud":  # cheat check: the cartridge left on its O-rings, 15 mm proud, and only the clip fitted: the clip meets its ears
-        yield from r.wait(0.5)
+    if ctx.mode in ("proud", "aside"):  # cheat checks: the cartridge left on its O-rings, 15 mm proud; proud: the clip fitted, and it meets its ears;
+        yield from r.wait(0.5)  # aside: the clip lowered into the lugs' gap 20 mm beside its slots and let go
     else:
         yield from r.move(e - np.array([pad + 0.03, 0.0, 0.0]), grip=gp, finger=0.0, t=2.5, label="behind the stem, fingers closed")
         yield from r.move(e - np.array([pad + 0.002, 0.0, 0.0]), t=1.0, label="fingertips at the stem's end face")
@@ -383,6 +404,14 @@ def demo_script(ctx):
     clip_at = lambda: m.state(env, "clip").pos  # noqa: E731
     # the clip hangs about 0.7 degrees off upright in the pinch, which puts its legs' tips 0.6 mm towards the face: aim them at the slots' middle
     tip_at = lambda: m.state(env, "clip").to_world(np.array([[0.0, 0.0, -LEG_L]]))[0]  # noqa: E731
+    if ctx.mode == "aside":
+        yield from l.servo(np.array([slot_x, VY + 0.02, TOP + ZV - NOTCH_Z - 0.005]), tol=0.001, timeout=4.0, read=tip_at, label="the clip lowered beside its slots")
+        yield from l.open(t=0.4)
+        yield from l.move(l.at() + np.array([0.0, 0.0, 0.05]), t=1.0, label="up and away")
+        for _ in range(40):
+            yield
+        _report(ctx, env, "aside end: ")
+        return
     yield from l.servo(np.array([slot_x, VY, tip_at()[2]]), tol=0.0001, timeout=2.0, read=tip_at, label="the clip's leg tips over the slots' middle")
     for k in range(10):  # still pinched, so it cannot tip, until its leg tips are 5 mm into the lower slots, past the ears' window (pushed from inside the window, a leg catches the lower lip)
         if tip_at()[2] < TOP + ZV - NOTCH_Z - 0.005:
