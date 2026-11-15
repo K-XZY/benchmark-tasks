@@ -1,0 +1,21 @@
+{
+  "title": "Set a pneumatic cylinder's slot sensor: drag it along the slot by a hex driver seated in its clamp screw, then clamp it",
+  "category": "Impact on jobs",
+  "instruction": "Push the rod fully in, set the sensor so it switches in the middle of its switching range, clamp it, then let go.",
+  "context": "A cylinder's sensor is set at every cylinder fit, stroke change and sensor replacement. Each occupation doing it has a Core O*NET task: industrial machinery mechanics (49-9041.00, \"Repair or replace broken or malfunctioning components of machinery or equipment.\"), machinery maintenance workers (49-9043.00, \"Install, replace, or change machine parts and attachments, according to production specifications.\") and millwrights (49-9044.00, \"Replace defective parts of machine, or adjust clearances and alignment of moving parts.\"); 446,900, 59,700 and 40,700 in US jobs in 2025 (BLS via O*NET), 547,300 together. With the rod home, the small sensor is dragged along the cylinder's T-slot by a hex driver seated in its clamp screw: on until its LED lights, through its switching band until the LED goes out, back to the band's middle, then clamped with a quarter turn (75 degrees or more). The skill: moving a small part by a tool kept in it, stopping where an indicator says, and locking it there.",
+  "setup": "Two YAM arms at the near edge of a table; positions are (x forward from the arm bases, y left) in cm, heights above the table. A compact pneumatic cylinder of anodised aluminium (about 40 x 40 mm, 10 cm long) lies fixed along x at y 0 on a steel mount, its body from x 22 to 32, its top face 5 cm up with a T-slot along it. Its rod starts 40 mm out, with a clevis on its end; with the rod home the clevis is at x 36 and the piston's magnet at x 25.2. A magnetic slot sensor (a 29.3 x 5 x 4.6 mm plastic body, a yellow LED, a clamp screw on top taking a 1.5 mm hex key, and its cable to a 24 V supply) lies loose in the slot, its middle at x 24, unlit. A 1.5 mm hex driver (blue handle 14 mm across and 40 mm long, a 60 mm steel blade) stands in a wooden holder at (20, 15). The arms start at their ready pose.",
+  "scoring": "Real trial: the band's middle is marked on the body once beforehand, with the rod fully in, as the midpoint of where a sensor's LED lights when moved toward the magnet from each side; the trial is checked by the LED, a caliper from the sensor's middle to that mark, a push on the clamped sensor and a video. The switching band's middle is the piston magnet's position with the rod fully in; inside the band means within 3.5 mm of it. That middle counts; the midpoint of the LED's on and off edges lies about 0.5 mm from it, because of the hysteresis. Hands clear: every fingertip 6 cm or more from the sensor and 5 cm from the clevis, and the driver's tip out of the clamp screw. Once the sensor is clamped and the hands are clear for 1 s, the scorer drives the rod 20 mm out and back. 1.0: clamped within 1 mm of the band's middle; the LED goes off and on with the rod; the clamped sensor holds a 10 N push along the slot (moves under 0.5 mm); hands clear; held 2 s. 0.6: clamped inside the band, without the 1.0 result. 0.3: clamped inside the band with the rod not fully in. 0: not clamped, clamped outside the band, or the clamp screw turned past 200 degrees (stripped).",
+  "run_limit": "2,400 steps (120 s at 20 Hz)",
+  "fidelity": "Rigid bodies at 240 Hz on GPU. The LED is lit in code from the piston magnet's distance: on within 3.5 mm, off beyond 4.5 mm (guesses, to measure). The driver's tip is a 2 mm hex in a 3 mm square opening, not the real 1.5 mm hex in a fitted socket, which would not seat in the solver. The clamp is coded: a turn of 75 degrees or more with the tip seated locks the sensor. The sensor cannot leave its slot. Rod seal and slot friction (8 N, 1.5 N) are guesses.",
+  "scores": "Dream-1 run: 0; demo: 1.0",
+  "reset_notes": "Nothing is consumed. Loosen the clamp screw a quarter turn, slide the sensor back to x 24 in the slot, put the driver back in its holder, and pull the rod out 40 mm.",
+  "keywords": [
+    "tool engagement",
+    "drag by a tool",
+    "indicator",
+    "clamp",
+    "pneumatics",
+    "maintenance"
+  ],
+  "media": "M-V2BG5K"
+}
