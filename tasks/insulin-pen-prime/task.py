@@ -10,7 +10,8 @@ dose knob turns (knob, about the pen's axis) and screws out (knob_out, along it)
 in against PUSH_N (a constant 9.2 N over the stroke) and counts the units back down, as the pen delivers them; pushed out with the needle up and the shield off,
 the 2 units show as a drop at the needle tip. The number sleeve turns and screws out with the knob, so the window shows the unit count as the
 real pen does: even numbers printed, odd numbers as lines. The outer shield is a free body held on the hub in code (its pose written each step, its weight carried) until a
-hand pinching it has drawn it 3 mm off along the pen's axis; then it is free.
+hand pinching it has drawn it along the pen's axis until its open end is past the needle's tip (16 mm); on the way it slides on the axis, and let go
+part way it stays there, on the needle. Then it is free.
 
     python demokit.py task.py OUT --mode full                    the full-score reference, filmed
     python demokit.py task.py OUT --no-record --mode noshot,short_hold,over,shieldon,shieldloose,holdend --hold 2.5   failure checks: 0.2, 0.2, 0.6, 0.0, 0.0, 0.6
@@ -46,8 +47,9 @@ MAX_U = 60
 SHOT_U, DOSE_U = 2, 12
 CLICK_T = 0.04  # N m: the click's hold
 STOP_T = 0.4  # N m: the stops at 0 and 60 units
-PUSH_N = 9.2  # N: the knob's resistance to a push, over the whole stroke: a standard KwikPen's plateau injection force at 6 U/s, 9.17 N (max 11.95 N; van der Burg 2011)
-PUSH_PRE = 0.004  # m: the drive's preload while a push is on (5000 N/m x 4 mm = 20 N, above the 9.2 N cap)
+PUSH_N = float(os.environ.get("PEN_PUSH_N", "9.2"))  # N: the knob's resistance to a push, over the whole stroke: a standard KwikPen's plateau injection force at
+# 6 U/s, 9.17 N (max 11.95 N; van der Burg 2011). PEN_PUSH_N sets another value for force checks only.
+PUSH_PRE = max(0.004, 1.5 * PUSH_N / 5000.0)  # m: the drive's preload while a push is on (5000 N/m x 4 mm = 20 N, above the cap; more for a harder check)
 R_KNOB, KNOB0, KNOB1 = 0.009, -0.080, -0.066  # the dose knob: radius, its end face and its top at 0 units
 R_BODY, BODY1 = 0.0085, 0.015
 R_SLEEVE = 0.0072
@@ -56,6 +58,7 @@ R_HOLDER, HOLDER1 = 0.0068, 0.064
 HUB0, HUB1, R_HUB = 0.064, 0.076, 0.0055
 NEEDLE1 = 0.080  # the needle's tip (4 mm out of the hub)
 SH0, SH1, R_SH = 0.066, 0.086, 0.006  # the outer shield: from its open end to its closed end
+SH_FREE = NEEDLE1 - SH0 + 0.002  # drawn this far along the axis (16 mm), its open end is past the needle's tip and it comes off
 PEN_MASS, SHIELD_MASS = 0.020, 0.002  # the shield is 0.5 g; 2 g keeps it steady (stated)
 Q_TRAY = (math.sqrt(0.5), 0.0, 0.0, math.sqrt(0.5))  # xyzw: a quarter turn about x lays the pen along y, needle toward -y, window down
 
@@ -183,7 +186,7 @@ class Pen:
     def reset(self, env=None):
         self.steps, self.prev, self.cum, self.offset = 0, None, 0.0, 0.0
         self.units, self.peak = 0, 0
-        self.latched, self.pinch_at = True, None
+        self.latched, self.pinch_at, self.slide = True, None, 0.0
         self.pushing, self.push_from, self.push_up_ok, self.push_out = False, 0, True, 0.0
         self.home_s, self.shot_ok, self.wasted, self.touched, self.dropped = 0.0, False, False, False, False
         self.hold, self.last, self.full, self.drop = 0, {}, False, False
@@ -252,19 +255,20 @@ class Pen:
         for hand in (tips[:12], tips[12:]):  # either hand: one finger's six points, then the other's
             opening = float(np.linalg.norm(hand[:6].mean(axis=0) - hand[6:].mean(axis=0))) / 2 - 0.0045
             hm = s.to_local(hand.mean(axis=0))[0]
-            if np.hypot(hm[0], hm[1]) < 0.02 and SH0 - 0.005 < hm[2] < SH1 + 0.005 and R_SH - 0.003 < opening < R_SH + 0.0015:  # closed on it
+            if np.hypot(hm[0], hm[1]) < 0.02 and SH0 + self.slide - 0.005 < hm[2] < SH1 + self.slide + 0.005 and R_SH - 0.003 < opening < R_SH + 0.0015:  # closed on it
                 pinched, mid = True, hm
                 break
         if pinched:
             zmid = float(mid[2])
-            self.pinch_at = zmid if self.pinch_at is None else self.pinch_at
-            if zmid - self.pinch_at > 0.003:  # drawn 3 mm off along the axis: it comes away
+            self.pinch_at = zmid - self.slide if self.pinch_at is None else self.pinch_at
+            self.slide = max(0.0, zmid - self.pinch_at)  # the pinch draws it along the axis, on the hub and the needle
+            if self.slide > SH_FREE:  # its open end past the needle's tip: it comes away
                 self.latched = False
                 m.push(env, "shield", (0.0, 0.0, 0.0))
                 return
         else:
-            self.pinch_at = None
-        pose = torch.tensor([[*(s.pos + np.asarray(origin.cpu())), *s.quat_xyzw]], dtype=torch.float32, device=asset.device)
+            self.pinch_at = None  # let go part way, it stays where it is, still on the needle
+        pose = torch.tensor([[*(s.pos + s.rotation()[:, 2] * self.slide + np.asarray(origin.cpu())), *s.quat_xyzw]], dtype=torch.float32, device=asset.device)
         asset.write_root_pose_to_sim(pose)
         vel = np.r_[s.lin_vel, s.ang_vel]
         asset.write_root_velocity_to_sim(torch.tensor([vel.tolist()], dtype=torch.float32, device=asset.device))
@@ -367,6 +371,20 @@ def demo_script(ctx):
     g_pick = d.down(-90.0)  # fingers closing along x across the body
     g_hold = d.tilted(90.0, -90.0)  # the same grip pitched a quarter turn about x: fingers level toward -y, the needle up
     g_act = d.tilted(90.0, 90.0)  # the right hand: fingers level toward +y, closing along x
+
+    def torques(tag):
+        """The arms' joint torques now (the simulator's drive efforts, gravity included) and their limits, for the README's force check."""
+        out = {"push_n": PUSH_N}
+        try:
+            for side in ("left", "right"):
+                dat = env.unwrapped.scene[f"{side}_robot"].data
+                out[side] = [round(float(v), 2) for v in m._np(dat.applied_torque)[0, :6]]
+                lim = getattr(dat, "joint_effort_limits", None)
+                if lim is not None:
+                    out[side + "_limit"] = [round(float(v), 1) for v in m._np(lim)[0, :6]]
+        except Exception as e:  # noqa: BLE001  logging only
+            out["error"] = repr(e)[:200]
+        print(f"[pen] torques {tag}: " + json.dumps(out), flush=True)
     if ctx.mode == "scene":
         yield from L.wait(1.0)
         print("[pen] END " + json.dumps({"mode": ctx.mode, **PEN.last}), flush=True)
@@ -376,7 +394,7 @@ def demo_script(ctx):
     c = pen().pos
     yield from L.move(c + np.array([0.0, 0.0, 0.08]), grip=g_pick, finger=d.FINGER_OPEN, t=2.0, label="over the pen")
     yield from L.move(c + np.array([0.0, 0.0, 0.0095]), t=1.0, label="down round the pen")
-    yield from L.close(2 * R_BODY, force=40.0, label="pinch the pen")
+    yield from L.close(2 * R_BODY, force=60.0, label="pinch the pen")  # at 40 N the push tipped the pen in the pinch until the fingers slid off the knob
     yield from L.move(L.at() + np.array([0.0, 0.0, 0.15]), t=1.5, label="lift the pen")
     yield from L.turn(-90.0, axis=(1.0, 0.0, 0.0), t=1.5, label="needle up")
     held = pen().pos - L.at()
@@ -429,16 +447,21 @@ def demo_script(ctx):
     def shot(hold_s):
         """The safety shot: closed fingers under the knob's end face, pushed up until the knob is home, held there."""
         end = pen().to_world(np.array([0.0, 0.0, KNOB0 - PEN.last["out_mm"] / 1000.0]))[0]
-        under = end + np.array([0.0, -0.006, -0.018 - 0.004])  # the closed fingers' upper edge (18 mm above the TCP) 4 mm under the end face
+        under = end + np.array([0.0, -0.004, -0.018 - 0.004])  # the closed fingers' upper edge (18 mm above the TCP) 4 mm under the end face, their tips
+        # 4 mm short of its middle (6 mm short, the push's moment tipped the pen in the left hand and the fingers slid off in 3 of 8 runs)
         yield from R.move(under + np.array([0.0, -0.05, 0.0]), grip=g_act, finger=d.FINGER_CLOSED, t=1.0, label="below the knob")
         yield from R.move(under, t=0.8, label="under the knob")
+        torques("before the push")
         knob_end = lambda: pen().to_world(np.array([0.0, 0.0, KNOB0 - PEN.last["out_mm"] / 1000.0]))[0]  # noqa: E731
         home = lambda s: pen().to_world(np.array([0.0, 0.0, KNOB0 + 0.0003]))[0]  # noqa: E731  the knob home, and a little on (it stops there)
         goal = pen().pos.copy()  # the left hand holds the pen here against the push: the arm is soft and yields otherwise
         yield from ctx.together(L.servo(goal, tol=0.0005, timeout=3.0, gain=0.5, read=lambda: pen().pos, label="hold the pen against the push"),
                                 R.servo(home, tol=0.0003, timeout=3.0, gain=0.5, read=knob_end, label="push the knob home"))
-        yield from ctx.together(L.servo(goal, tol=0.0005, timeout=hold_s, gain=0.5, read=lambda: pen().pos, label="hold the pen against the push"),
-                                R.servo(home, tol=0.0003, timeout=hold_s, gain=0.5, read=knob_end, label="hold the knob home"))
+        yield from ctx.together(L.servo(goal, tol=0.0005, timeout=hold_s / 2, gain=0.5, read=lambda: pen().pos, label="hold the pen against the push"),
+                                R.servo(home, tol=0.0003, timeout=hold_s / 2, gain=0.5, read=knob_end, label="hold the knob home"))
+        torques("holding the knob home")
+        yield from ctx.together(L.servo(goal, tol=0.0005, timeout=hold_s / 2, gain=0.5, read=lambda: pen().pos, label="hold the pen against the push"),
+                                R.servo(home, tol=0.0003, timeout=hold_s / 2, gain=0.5, read=knob_end, label="hold the knob home"))
         print(f"[pen] safety shot: {json.dumps(PEN.last)}", flush=True)
         R.trim = np.zeros(3)  # the push's servo shift (it pressed in to meet 9.2 N) must not carry into the dialling
         yield from R.move(R.at() + np.array([0.0, -0.05, -0.02]), t=0.8, label="away from the knob")
