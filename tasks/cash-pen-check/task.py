@@ -3,9 +3,9 @@ back, and sort the note by the ink's colour.
 
 A US $20 note (156 x 66.3 mm, 1 g) lies flat on the counter. A counterfeit-detector pen stands uncapped in a pen cup. The pen's felt tip drags
 on the paper harder than a 1 g note holds on the counter, so a stroke with the note unpinned slides it and smears; one hand presses the note's
-short edge flat while the other draws. In this task the ink shows amber on genuine note paper and dark on a suspect one (the task's own convention:
-the maker's guide says only that the ink detects note paper); the note then goes, slid along the counter under pressing fingertips and
-lifted no more than 5 mm, onto the green accept mat (amber) or the red reject mat (dark).
+short edge flat while the other draws. The pen's iodine ink stays light amber on genuine note paper and turns dark brown on a suspect note
+(the pen's own colours; see the README's Sources); the note then goes, slid along the counter under pressing fingertips and lifted no more
+than 5 mm, onto the green mat (amber; the till) or the red mat (dark; set aside to report).
 
 The ink is code: a 3 mm dot shows on the note wherever the felt tip has touched the paper while moving across it.
 
