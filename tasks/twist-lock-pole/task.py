@@ -1,6 +1,7 @@
-"""Set a twist-lock extension pole to its mark and lock it: the lock has no detent, so only a push proves it.
+"""Lengthen a paint-roller extension pole for rolling a ceiling and lock it: the lock has no detent, so only a push proves it.
 
-A 2 to 4 ft aluminium twist-lock extension pole lies loose on the table: outer tube 25 mm across, inner tube 22 mm, 61 cm collapsed. An eccentric cam inside locks the length
+The pole is a Mr. LongArm 9224 Twist-Lok, 2.3 to 4 ft (0.70 to 1.22 m), anodized aluminium, with an internal lock that locks with a twist at any length and a nylon
+threaded end for the roller frame. It lies loose on the table, collapsed: outer tube 1 in (25.4 mm) across, inner tube 22 mm, 70 cm long. The lock inside holds the length
 when the inner tube is turned a quarter turn against the outer. Both arms counter-twist the tubes to release the cam (one arm alone only rolls the pole: a round tube resists
 rolling by about 0.006 N m, the cam by 0.3 N m), draw the inner tube out until the red band reaches the outer tube's end, and counter-twist again to lock it. Then the scorer
 pushes the pole's end with 50 N along its length: a locked pole holds.
@@ -8,7 +9,7 @@ pushes the pole's end with 50 N along its length: a locked pole holds.
 Sim: one free mechanism. The outer tube is its frame (0.25 kg); the inner tube slides (inner_slide, along y) and turns (inner_rot, about y) inside it. The cam is a stated
 coupling in code: within 20 degrees of inner_rot 0 (as found) the slide is held with up to 200 N; turned 70 degrees or more either way it slides against 2 N; between, the
 hold falls linearly. The cam's
-turning torque is a drive on inner_rot that holds its angle with at most 0.3 N m (a typical value, to be measured).
+turning torque is a drive on inner_rot that holds its angle with at most 0.3 N m (our choice, not published).
 
     python demokit.py task.py OUT --mode full                                     the full-score reference, filmed
     python demokit.py task.py OUT --no-record --mode one_arm,nolock,short --hold 1  failure checks: 0, 0.5, 0
@@ -36,18 +37,19 @@ INSTRUCTION = "Twist the pole's tubes against each other to free its lock, set i
 TOP = TABLE_TOP[SCENE]
 SUCCESS_HOLD_S = 0.5
 
-R_OUT, R_IN = 0.0125, 0.011
-L_OUT, L_IN = 0.55, 0.55
-COLLAPSED = 0.61  # overall length, collapsed
-TARGET = float(os.environ.get("POLE_TARGET", "0.85"))  # overall length at the mark
+R_OUT, R_IN = 0.0127, 0.011  # outer: the series' listed 1 in; inner: not published, a tube that slides in it
+L_OUT, L_IN = 0.64, 0.64
+COLLAPSED = 0.70  # overall length, collapsed: the 9224's 2.3 ft
+FULL = 1.22  # fully extended: its 4 ft
+TARGET = float(os.environ.get("POLE_TARGET", "0.94"))  # overall length at the mark: the ceiling setting, our choice
 EXTEND = TARGET - COLLAPSED  # inner_slide's travel to the mark
-CAM_T = 0.3  # N m to turn the cam (a typical value): below what a 45 N pinch turns on a 22 mm tube, about 2 x 0.5 x 45 N x 0.011 m = 0.5 N m
+CAM_T = 0.3  # N m to turn the cam (our choice, not published): below what a 45 N pinch turns on a 22 mm tube, about 2 x 0.5 x 45 N x 0.011 m = 0.5 N m
 UNLOCKED, LOCKED = math.radians(70.0), math.radians(20.0)  # turned this far either way: free; within this: held
 HOLD_N, SLIDE_N = 200.0, 2.0
 PUSH_N = 50.0
 X0 = 0.40
-Y_END = 0.40  # the outer tube's closed end (cap), towards the left arm
-Y_MOUTH = Y_END - L_OUT  # the outer tube's open end, where the inner tube comes out
+Y_MOUTH = -0.15  # the outer tube's open end, where the inner tube comes out
+Y_END = Y_MOUTH + L_OUT  # the outer tube's closed end (cap), towards the left arm
 LOOKS = {"alu": m.Look(color=m.rgb(0.78, 0.79, 0.80), metallic=0.9, roughness=0.35), "inner": m.Look(color=m.rgb(0.70, 0.71, 0.73), metallic=0.9, roughness=0.3),
          "grip": m.Look(color=m.rgb(0.10, 0.10, 0.11), roughness=0.85), "cam": m.Look(color=m.rgb(0.95, 0.75, 0.10), roughness=0.5),
          "red": m.Look(color=m.rgb(0.85, 0.08, 0.06), roughness=0.5), "tip": m.Look(color=m.rgb(0.12, 0.12, 0.13), roughness=0.6)}
@@ -69,7 +71,7 @@ def _pole() -> m.Part:
     tip = _tube(R_IN + 0.003, in0 - 0.03, in0, 24)  # the threaded tip's grey sleeve
     cam = m.box((0.004, 0.006, 0.004), (0.0, in1 - 0.01, R_IN))  # a stripe to read the inner tube's turn by
     stripe = m.box((0.002, 0.04, 0.0015), (0.0, Y_MOUTH - 0.02, R_IN + 0.0003))
-    slide = m.slider("inner_slide", "Y", -0.45, 0.0, [], [], mass=0.02, spring=0.0, damping=2.0, friction=0.0, effort=HOLD_N)
+    slide = m.slider("inner_slide", "Y", -(FULL - COLLAPSED), 0.0, [], [], mass=0.02, spring=0.0, damping=2.0, friction=0.0, effort=HOLD_N)
     rot = m.hinge("inner", "Y", (0.0, 0.0, 0.0), -100.0, 100.0, [("inner", inner, "inner"), ("band", band, "red"), ("tip", tip, "tip"), ("stripe", stripe, "cam")],
                   [m.col_hull("inner_c", _tube(R_IN, in0 - 0.03, Y_MOUTH, 32))], mass=0.20, spring=20.0, effort=CAM_T, friction=0.0, damping=0.002, parent="inner_slide",
                   inertia=(0.2 * L_IN ** 2 / 12, 0.2 * R_IN ** 2, 0.2 * L_IN ** 2 / 12))  # a thin tube: little about its own axis, so a twist turns it rather than the kit's round guess
