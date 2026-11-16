@@ -6,7 +6,7 @@ leans away and the gap is wider; the seal breaks, and the small tin is lifted of
 
 Sim (stated, all in code): the vacuum is two latches on the big tin, at opposite sides, over the small tin's rolled rim, held locked; they release when
 a fingertip of a hand not holding a tin strikes the big tin's rim within 45 degrees of the open side, moving at 0.15 m/s or more toward the tin
-relative to it and reaching its wall that step or the next. A strike elsewhere or slower does nothing; 1.0 m/s or more, at any time, is a dent. The drink is rigid mass in the big tin; no liquid.
+relative to it and reaching its wall that step or the next, while the other hand holds the big tin. A strike elsewhere or slower does nothing; 1.0 m/s or more, at any time, is a dent. The drink is rigid mass in the big tin; no liquid.
 
     python demokit.py task.py OUT --mode scene --stills 1
     python demokit.py task.py OUT --mode full
@@ -204,7 +204,8 @@ class Seal:
         tips = m.fingertips(env)  # either hand's
         loc = b.to_local(tips)  # in the big tin's frame: their change between steps is their velocity relative to the tin
         loc_s = s.to_local(tips)
-        held = [gripping(loc[k:k + 12], r1, 0.0, H1) or gripping(loc_s[k:k + 12], r2, 0.0, H2) for k in (0, 12)]  # a hand holding either tin
+        held_big = [gripping(loc[k:k + 12], r1, 0.0, H1) for k in (0, 12)]  # a hand holding the big tin
+        held = [held_big[j] or gripping(loc_s[k:k + 12], r2, 0.0, H2) for j, k in enumerate((0, 12))]  # a hand holding either tin
         self.held_by = held
         if self.prev is not None:
             vel = (loc - self.prev) / dt
@@ -222,7 +223,7 @@ class Seal:
                 self.strikes.append((round(self.steps * dt, 2), round(v_in, 2), round(ang, 0)))
                 if v_in >= V_DENT:
                     self.dent = True  # at any time, before or after the seal breaks
-                if not self.broken and not self.dent and ang <= 45.0:
+                if not self.broken and not self.dent and ang <= 45.0 and held_big[1 - i // 12]:  # the other hand holds the big tin against the blow
                     self.broken, self.by = True, "strike"
                     for nm, sg, *_ in LATCHES:
                         m.unlock(env, "big", nm)
@@ -359,7 +360,7 @@ def demo_script(ctx):
         print("[sk] moved: " + json.dumps(SEAL.last), flush=True)
         yield from R.open(label="let go of the small tin")
         yield from R.move(R.at() - 0.09 * ys, t=0.8, label="back off")
-    # the small tin taken round its middle and lifted off, turned a little each way as it comes
+    # the small tin taken round its middle and lifted straight off in one lift
     s0 = m.state(env, "small")
     zg = 0.074  # along the small tin from its mouth, where the hand takes it
     grip_pt = s0.to_world(np.array([[0.0, 0.0, zg]]))[0]
@@ -367,10 +368,7 @@ def demo_script(ctx):
     yield from R.move(grip_pt - 0.09 * ys, t=0.6, label="level with it")
     yield from R.move(grip_pt, t=1.0, label="fingers either side of the small tin")
     yield from R.close(2 * r2(zg), force=30.0, label="hold the small tin")
-    for k, (dz, turn) in enumerate(((0.01, 6.0), (0.01, -12.0), (0.012, 6.0))):
-        yield from R.move(R.at() + np.array([0.0, 0.0, dz]), t=0.5, label=f"lift and wiggle ({k + 1})")
-        yield from R.turn(turn, t=0.4, label=f"wiggle ({k + 1})")
-    yield from R.move(R.at() + np.array([0.0, 0.0, 0.07]), t=0.9, label="the small tin up and clear")
+    yield from R.move(R.at() + np.array([0.0, 0.0, 0.102]), t=1.6, label="one lift: the small tin straight up and clear")
     print("[sk] lifted: " + json.dumps(SEAL.last), flush=True)
     s1 = m.state(env, "small")
     off = R.at() - s1.pos  # the hand from the small tin's mouth
