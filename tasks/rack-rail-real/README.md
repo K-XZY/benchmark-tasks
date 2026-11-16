@@ -1,10 +1,10 @@
 # Hang a server's tool-less sliding rail in a 4-post rack: back end into the marked U, then draw out the front and seat it
 
-Racking servers is core data-centre work. Following a tool-less rail's installation steps, the rail goes in back end first: the two pegs on its back end piece go into the lowest and highest holes of the chosen U on the rear flange, and the end piece is pushed on until its latch catches; the front end piece is then seated the same way on the front flange.
+Racking servers is core data-centre work. Dell's installation sheet for its tool-less ReadyRails II sliding rails gives the steps: "Align each end piece in the bottom and top holes of the desired U spaces. Engage the back end of the rail until it fully seats on the vertical rack flange and the latch clicks into place. Repeat these steps to position and seat the front end piece on the vertical rack flange." The rail here is that kit's B6 rail, the 1U rail of the PowerEdge R640.
 
 **Ability tested:** feeding a long part's pegs into square holes at a marked height, past a latch, and extending it to reach a second flange. The rack's flanges are a typical 0.74 m apart, longer than the collapsed rail (0.63 m). In the demo both hands carry the rail in level, and its back end's pegs are fed into the marked U's square holes and pushed past the latch. The back hand then lets go, and the front hand draws the front member about 11 cm out along its slide to the front flange, matches the same U, so the rail is level, and pushes it home until it latches.
 
-**Nearest tasks.** The rack here is at a typical depth, with EIA-310 square holes, and the rail at a real 1U rail's length and mass. A blanking panel fitted at a marked U fits one part on one pair of flanges. Here a telescoping rail is seated on two flanges 0.74 m apart, its front drawn out along its slide, both ends latched at the same U. A server chassis slid onto ledges is a different act: it moves the server, not the rail.
+**Nearest tasks.** The rack here is at a typical depth, with EIA-310 square holes, and the rail at Dell's B6 length range (630 to 883 mm). A blanking panel fitted at a marked U fits one part on one pair of flanges. Here a telescoping rail is seated on two flanges 0.74 m apart, its front drawn out along its slide, both ends latched at the same U. A server chassis slid onto ledges is a different act: it moves the server, not the rail.
 
 **Arms.** In the demo both hands carry the rail, the left seats its back end and the right draws and seats its front. The instruction does not ask for two hands. In one test a single hand at the rail's middle lost the rail, ending in a solver artefact (`onearm` below); a one-handed route that grips near the back end was not tested.
 
@@ -39,9 +39,28 @@ The demo reads the rail's pose and its slide's position from the simulator, stan
 
 The rack's near posts carry square-hole flanges: EIA-310, 9.5 mm square holes, three to each 44.45 mm U, built as solid bars round real holes. The bottom U's lower edge is 6 mm above the table, and the hole heights follow from it. The marked U is drawn with yellow lines on both flanges. The rack's frame and far posts are drawn only.
 
-The rail is a free mechanism of 1.35 kg (to weigh). Its outer member carries the back end piece. The front member, with the front end piece, slides along it on a prismatic joint with 3 N of friction (to measure), from 0.63 m collapsed to 0.88 m. Each end piece has two square pegs, at the bottom and top holes of a U, tapered from 7.5 mm at the end piece to 4.5 mm at the tip over 9 mm. That is a lead-in, as real pegs have, so a push guides them into the holes. The real pegs are to be measured.
+The rail is a Dell B6 ReadyRails II sliding rail, the tool-less 1U rail of the PowerEdge R640. In the simulation it is a free mechanism. Its outer member carries the back end piece. The front member, with the front end piece, slides along it on a prismatic joint (the rail's depth adjustment), from 0.63 m collapsed to 0.883 m, Dell's square-hole range between flanges. Each end piece has two square pegs, at the bottom and top holes of a U, and a spring latch whose release button is at the end piece's midpoint, as Dell's sheet shows. The rail's inner member, the server slide, is not modelled: it stays shut while the rail is hung.
 
-The latches are coded. An end piece latches when its two pegs are within 1 mm of one U's bottom and top holes and its face is pushed home on its flange. Over its last 3 mm it must pass a 10 N detent, approximated and to be measured. Once home it is held where it seated, as the latch's hook holds it to the flange.
+The latches are coded. An end piece latches when its two pegs are within 1 mm of one U's bottom and top holes and its face is pushed home on its flange. Over its last 3 mm it must pass a detent. Once home it is held where it seated, as the latch's hook holds it to the flange.
+
+### Figures and where they come from
+
+| Figure | Value | Source |
+|---|---|---|
+| Rail | Dell B6 ReadyRails II, sliding, tool-less in square-hole 4-post racks | Dell, PowerEdge R640 Technical Guide, p. 30 and table 17 |
+| Length between flanges | 630 to 883 mm (square holes); collapsed at the start, 0.63 m | Dell, PowerEdge R640 Technical Guide, table 18 |
+| End pieces | two pegs each, in the bottom and top holes of one U; a latch that clicks as the end piece seats; release button at the end piece's midpoint | Dell, "Rack Installation - Sliding Rails" sheet |
+| Rack holes | 9.5 mm square, three to each 44.45 mm U | EIA-310 |
+| Flange spacing | 0.74 m | a typical rack depth, within Dell's range |
+| Rail mass | 1.35 kg | simulation setting: Dell lists no mass; a steel rail of this length, carried level with two hands |
+| Rail section | 18 x 40 mm channel | simulation setting: Dell gives no section; it fits within one U |
+| Pegs | square, tapered from 7.5 to 4.5 mm over 9 mm | simulation setting: Dell gives no peg size; a lead-in into EIA-310's 9.5 mm holes |
+| Slide drag | 3 N | simulation setting: light enough to draw by hand, enough that the front member stays where it is left |
+| Latch detent | 10 N over the last 3 mm | simulation setting: so that seating needs a deliberate push. The real trial judges the latch by eye, not by force |
+
+## Building it for a real trial
+
+Use one Dell B6 ReadyRails II sliding rail and a 4-post rack with EIA-310 square-hole flanges set 0.74 m apart, with the third U from the bottom marked on both near flanges. Lay the rail collapsed on the table at the start position. Judge each end piece by eye: both pegs through the marked U's bottom and top holes, the end piece flat on its flange and its latch closed. Judge level with a spirit level on the rail. Then check on the camera that both hands are off and 3 cm or more clear of the rail for 2 s, and that the rail is still hung at the end. No force is measured.
 
 ## Scoring
 
@@ -51,8 +70,8 @@ See `scoring` in `task.json`, and `judge` and `Hang` in `task.py`. The scorer ho
 
 | Run | What it does | Score |
 |---|---|---|
-| Dream-1 | Run at 320 x 176, 2,400 steps. Both hands reach down to the rail where it lies on the table and touch it, but never lift it to the rack; neither end goes onto a flange | 0 |
-| `full` | The whole task | 1.0, at step 421 (21 s): both ends latched at the marked U, the rail level (0.00 degrees) |
+| Dream-1 | Run at 320 x 176, 2,400 steps. Both hands reach down to the rail where it lies on the table and close beside it, but never lift it to the rack; neither end goes onto a flange | 0 |
+| `full` | The whole task | 1.0, at step 425 (21 s): both ends latched at the marked U, the rail level |
 | `wrongu` | Both ends seated one U above the marked one | 0.0: both ends latched at the U above |
 | `frontoff` | The back at the marked U, then the front lifted toward the U above | 0.25: the back latched; the front, out of the arm's reach a U higher, never latched. A front latched a U off scores 0.25 in `check_score.py` |
 | `partial` | The back pegs pushed only part way in, then held | 0.0: 4.2 mm short of home, no latch |
@@ -65,7 +84,13 @@ The demo takes about 21 s of simulated time, about 2 minutes of wall time on one
 
 ## Sources
 
-All meshes are generated by `task.py` and `mechkit.py`. There are no third-party assets. Rack hole dimensions: the EIA-310 standard. The steps follow the rail maker's tool-less installation sheet.
+All meshes are generated by `task.py` and `mechkit.py`. There are no third-party assets.
+
+- Dell EMC, *PowerEdge R640 Technical Guide*, "Rack rails", tables 17 (static and sliding rails) and 18 (rails adjustability): https://coloradosos.gov/pubs/elections/VotingSystems/DVS-DemocracySuite517/documentation/DellPoweredgeR640TechGuide.pdf
+- Dell, *Rack Installation - Sliding Rails* (B6 ReadyRails II sliding rail assemblies), "Installing and Removing Tool-less Rails (Square Hole or Round Hole Racks)": https://pcserverandparts.com/content/Spec%20Sheets/Servers/Dell/Dell%20PowerEdge%20R620/Rack%20Installation%20%E2%80%94%20Sliding%20Rails.pdf
+- Rack hole dimensions: the EIA-310 standard.
+
+Dell, PowerEdge and ReadyRails are trademarks of Dell Inc., named here for identification only.
 
 ## Licence
 

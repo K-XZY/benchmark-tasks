@@ -3,10 +3,13 @@ clicks, while the other hand supports the rail's front; then draw the front memb
 and seat it until it clicks.
 
 The rack's near posts stand at x 0.28 with their flanges 0.74 m apart along y (rear at +0.37, front at -0.37): square EIA-310 holes, 9.5 mm,
-three to a U of 44.45 mm, the target U marked on both. The rail is a free mechanism: its outer member carries the back end piece; its front
-member, with the front end piece, slides on it (the depth adjustment), collapsed at 0.63 m. Each end piece has two square pegs, at the bottom
-and top holes of a U. The latch is coded: an end piece pushed home with its pegs through the holes must pass a 10 N detent, then is held
-against its flange as the latch does. Mass 1.35 kg.
+three to a U of 44.45 mm, the target U marked on both. The rail is a Dell B6 ReadyRails II sliding rail, the 1U PowerEdge R640's (Dell's
+R640 Technical Guide, tables 17 and 18): a free mechanism whose outer member carries the back end piece, and whose front member, with the
+front end piece, slides on it (the depth adjustment) over Dell's square-hole range, 630 to 883 mm between flanges. Each end piece has two
+square pegs, at the bottom and top holes of a U, and a latch that clicks as it seats (Dell's "Rack Installation - Sliding Rails" sheet).
+The latch is coded: an end piece pushed home with its pegs through the holes must pass a detent, then is held against its flange as the
+latch's hook holds it. Values Dell does not publish (mass, peg size, the slide's drag, the detent) are simulation settings, each with its
+reason below.
 
 Debug:  python demokit.py task.py OUT --no-record --stills 20 --mode full
 Final:  python demokit.py task.py OUT
@@ -60,15 +63,15 @@ def u_holes(k: int):
     return [z0 + 6.35 * mm, z0 + 6.35 * mm + HOLE_PITCH, z0 + 6.35 * mm + 2 * HOLE_PITCH]
 
 
-# -- the rail (a server maker's 1U tool-less sliding rail) -----------------------------------------------------------------------------------
-RAIL_L = 0.630  # collapsed, end piece face to end piece face
-RAIL_W, RAIL_H = 0.018, 0.040  # the channel across (x) and its height (z)
-RAIL_KG, DRAW_KG = 1.00, 0.35  # the outer member with the back end piece; the front member
-PEG, PEG_TIP, PEG_L, PEG_TIP_L = 7.5 * mm, 4.5 * mm, 5.0 * mm, 4.0 * mm  # square pegs tapered from 7.5 to 4.5 mm over 9 mm, in 9.5 mm holes
+# -- the rail: a Dell B6 ReadyRails II sliding rail (1U, tool-less) ---------------------------------------------------------------------------
+RAIL_L, RAIL_MAX = 0.630, 0.883  # end piece face to end piece face, collapsed and drawn out: Dell's square-hole range between flanges (R640 Technical Guide, table 18)
+RAIL_W, RAIL_H = 0.018, 0.040  # simulation setting: the channel across (x) and its height (z), within one U (Dell gives no section)
+RAIL_KG, DRAW_KG = 1.00, 0.35  # simulation setting, 1.35 kg in all (Dell lists no mass): a steel rail of this length, heavy enough that it is carried level with two hands
+PEG, PEG_TIP, PEG_L, PEG_TIP_L = 7.5 * mm, 4.5 * mm, 5.0 * mm, 4.0 * mm  # simulation setting: square pegs tapered from 7.5 to 4.5 mm over 9 mm, a lead-in to EIA-310's 9.5 mm holes
 PEG_DZ = (6.35 * mm, 6.35 * mm + 2 * HOLE_PITCH)  # the pegs at the bottom and top holes of a U, from the U's lower edge
 END_H = U  # the end piece's height
-DRAW_FRICTION = 3.0  # N: the slide's friction (to measure)
-LATCH_N = 10.0  # N: the latch's detent as an end piece is pushed home (approximated, to be measured)
+DRAW_FRICTION = 3.0  # N, simulation setting: the depth slide's drag, light enough to draw by hand, enough that the front member stays where it is left
+LATCH_N = 10.0  # N, simulation setting: the detent over the latch's last 3 mm, so a seat needs a deliberate push; the real trial judges the click by eye
 LATCH_TRAVEL = 3.0 * mm
 RAIL_START = (0.18, 0.0)  # the rail's middle on the bench
 CLEAR = 0.03
@@ -144,7 +147,7 @@ def _rail() -> m.Part:
                   ("front_latch", m.box((0.010, 0.012, 0.010), (-0.012, -half + 0.016, 0.0)), "latch")] + dm
     draw_cols = [m.col_box("c_front_end", (0.030, 0.008, END_H), (0.0, -half + 0.004, 0.0)),
                  m.col_box("c_inner", (RAIL_W - 0.004, 0.072, RAIL_H - 0.008), (0.0, -half + 0.044, 0.0))] + dc
-    draw = m.slider("draw", "Y", -0.25, 0.0, draw_parts, draw_cols, mass=DRAW_KG, spring=0.0, damping=5.0, friction=DRAW_FRICTION, effort=200.0,
+    draw = m.slider("draw", "Y", RAIL_L - RAIL_MAX, 0.0, draw_parts, draw_cols, mass=DRAW_KG, spring=0.0, damping=5.0, friction=DRAW_FRICTION, effort=200.0,
                     inertia=(DRAW_KG * 0.3 ** 2 / 12, 1e-4, DRAW_KG * 0.3 ** 2 / 12))
     return m.mechanism("rail", (RAIL_START[0], RAIL_START[1], TOP + END_H / 2 + 0.0005), [draw], LOOKS, frame, cols, friction=(0.6, 0.5),
                        free_mass=RAIL_KG, frame_inertia=(RAIL_KG * RAIL_L ** 2 / 12, RAIL_KG * 0.02 ** 2 / 6, RAIL_KG * RAIL_L ** 2 / 12))
