@@ -83,16 +83,56 @@ class Joint:
         return self.a
 
 
+ON_STAND = np.array([0.0, -0.5, 0.0])  # the cover still on its rest: far from its place
+
+
+class Cover:
+    """The cover's pose: its centre `off` (m, station frame) from its place on the body at the swivel's angle now, turned `deg` about x."""
+
+    def __init__(self, ang, off, deg=0.0):
+        self.ang, self.off, self.deg = ang, np.asarray(off, float), deg
+        self.pos = T.body_point(T.C0 + [T.SEAT_IN, 0.0, 0.0], ang) + self.off
+
+    def rotation(self):
+        c, s = math.cos(self.ang - math.pi), math.sin(self.ang - math.pi)
+        a = math.radians(self.deg)
+        rx = np.array([[1.0, 0.0, 0.0], [0.0, math.cos(a), -math.sin(a)], [0.0, math.sin(a), math.cos(a)]])
+        return np.array([[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]]) @ rx
+
+
 def run(states) -> float:
-    """states: a list of (swivel angle in radians, fingertips (24, 3))."""
+    """states: a list of (swivel angle in radians, fingertips (24, 3)[, (the cover's centre's offset from its place, its turn in degrees)])."""
     T.TRIAL.reset()
     cur = {}
-    m.state = lambda env, name: Joint(cur["ang"])
+    m.state = lambda env, name: Joint(cur["ang"]) if name == "upper" else Cover(cur["ang"], *cur["cover"])
     m.fingertips = lambda env: cur["tips"]
-    for ang, tips in states:
-        cur["ang"], cur["tips"] = ang, tips
+    for s in states:
+        cur["ang"], cur["tips"] = s[0], s[1]
+        cur["cover"] = s[2] if len(s) > 2 else (ON_STAND, 0.0)
         T.TRIAL.step(None)
     return T.score(None)
+
+
+def with_cover(states, off, last=40, deg=0.0, drift=None):
+    """The same trial with the cover on the back, its centre `off` from its place and turned `deg`, for the `last` steps (`drift`: sliding on
+    along y, mm per step)."""
+    out = list(states)
+    n = len(out)
+    for i in range(max(0, n - last), n):
+        o = np.asarray(off, float) + (0.0 if drift is None else np.array([0.0, drift * (i - (n - last)) / 1000.0, 0.0]))
+        out[i] = (out[i][0], out[i][1], (o, deg))
+    return out
+
+
+def hold_turning(rate_deg, steps=40):
+    """At rest on the mark, then the body turned on at `rate_deg` by an unheld press, the cover going with it."""
+    base = trial(hold_steps=20)
+    ang = base[-1][0]
+    out = list(base)
+    for k in range(steps):
+        ang += math.radians(rate_deg) * DT
+        out.append((ang, on_arm(ang, 0.03), (np.zeros(3), 0.0)))
+    return out
 
 
 def trial(stop_at=math.radians(177.7), rate=math.radians(36.0), catch_steps=8, hold_steps=60, clear=True, catch_gap=0.002, overshoot=0.0,
@@ -250,35 +290,50 @@ def bounce(rebound, frac=0.5, rate=math.radians(36.0), block=math.radians(185.0)
 
 
 CASES = {
-    "the honest turn: pushed to 36 deg/s, caught on the arm, at rest 2.3 deg short for 1 s": (trial(), 1.0),
-    "the same turned the other way round": (trial(direction=-1.0), 1.0),
-    "the same, a hand left on the body (2 mm off it)": (trial(hand_on=True), 1.0),
-    "the same, a hand 2 cm off the body at the end": (trial(clear=False), 1.0),
-    "at rest 8 deg short of the mark": (trial(stop_at=math.radians(172.0)), 1.0),
-    "at rest 12 deg short of the mark": (trial(stop_at=math.radians(168.0)), 0.25),
-    "past the mark by 20 deg, then brought back to it": (trial(overshoot=math.radians(20.0)), 1.0),
-    "past the mark by 40 deg, then brought back to it": (trial(overshoot=math.radians(40.0)), 1.0),
-    "one and a half turns (540 degrees net), at rest facing away": (trial(extra_turn=math.radians(360.0)), 0.25),
-    "stopped at 120 deg, held": (trial(stop_at=math.radians(120.0)), 0.25),
+    "the whole task: the cover pressed home on the back (0 mm off) for 2 s": (with_cover(trial(hold_steps=60), np.zeros(3)), 1.0),
+    "the whole task, the turn the other way round": (with_cover(trial(direction=-1.0, hold_steps=60), np.zeros(3)), 1.0),
+    "the cover's centre 4 mm off its place": (with_cover(trial(hold_steps=60), [0.0, 0.004, 0.0]), 1.0),
+    "the cover's centre 6 mm off its place (on the back, not seated)": (with_cover(trial(hold_steps=60), [0.0, 0.0, -0.006]), 0.5),
+    "the cover held 7 mm out from the back": (with_cover(trial(hold_steps=60), [-0.007, 0.0, 0.0]), 0.5),
+    "the cover turned 4 deg from its place": (with_cover(trial(hold_steps=60), np.zeros(3), deg=4.0), 1.0),
+    "the cover turned 7 deg from its place": (with_cover(trial(hold_steps=60), np.zeros(3), deg=7.0), 0.5),
+    "the cover 2 cm off its place": (with_cover(trial(hold_steps=60), [0.0, 0.02, 0.0]), 0.0),
+    "the cover home only 0.9 s at the end": (with_cover(trial(hold_steps=60), np.zeros(3), last=18), 0.0),
+    "the cover home, the body at rest 12 deg short of the mark (heading not scored)": (with_cover(trial(stop_at=math.radians(168.0), hold_steps=60), np.zeros(3)), 1.0),
+    "the cover home on a body turning on at 3 deg/s (never still)": (hold_turning(3.0), 0.0),
+    "the cover home on a body turned on at 25 deg/s by the press": (hold_turning(25.0), 0.0),
+    "the cover sliding along the back at 0.2 mm a step from 2 mm off": (with_cover(trial(hold_steps=60), [0.0, -0.002, 0.0], drift=0.2), 0.5),
+    "the cover home after a blow (stopped dead in one step)": (with_cover(trial(hard=True, hold_steps=60), np.zeros(3)), 0.0),
+    "the cover home after a collision stop (no hand near)": (with_cover(trial(free_stop=True, hold_steps=60), np.zeros(3)), 0.0),
+    "the turn alone: pushed to 36 deg/s, caught on the arm, at rest 2.3 deg short for 1 s, no cover": (trial(), 0.0),
+    "the same turned the other way round": (trial(direction=-1.0), 0.0),
+    "the same, a hand left on the body (2 mm off it)": (trial(hand_on=True), 0.0),
+    "the same, a hand 2 cm off the body at the end": (trial(clear=False), 0.0),
+    "at rest 8 deg short of the mark": (trial(stop_at=math.radians(172.0)), 0.0),
+    "at rest 12 deg short of the mark": (trial(stop_at=math.radians(168.0)), 0.0),
+    "past the mark by 20 deg, then brought back to it": (trial(overshoot=math.radians(20.0)), 0.0),
+    "past the mark by 40 deg, then brought back to it": (trial(overshoot=math.radians(40.0)), 0.0),
+    "one and a half turns (540 degrees net), at rest facing away": (trial(extra_turn=math.radians(360.0)), 0.0),
+    "stopped at 120 deg, held": (trial(stop_at=math.radians(120.0)), 0.0),
     "stopped at 60 deg, held": (trial(stop_at=math.radians(60.0)), 0.0),
     "stopped by a collision (no fingertip on it) at the mark": (trial(free_stop=True), 0.0),
     "stopped dead by a hand in one step (36 deg/s to 0 within 0.05 s)": (trial(hard=True), 0.0),
     "still turning at 25 deg/s at the end": (trial(end_rate=math.radians(25.0), hold_steps=10), 0.0),
-    "on the mark only 0.9 s at the end": (trial(hold_steps=18), 0.25),
+    "on the mark only 0.9 s at the end": (trial(hold_steps=18), 0.0),
     "nothing done": ([(0.0, FAR)] * 60, 0.0),
-    "one push to 24.7 deg/s, no catch: it coasts on past the mark": (coast([math.radians(24.7)]), 0.25),
-    "one push to 10.5 deg/s, no catch: it creeps through the mark and on": (coast([math.radians(10.5)]), 0.25),
-    "one push to 11.5 deg/s, no catch: it creeps through the mark and on": (coast([math.radians(11.5)]), 0.25),
-    "caught and let go on the mark still turning at 2.9 deg/s: it drifts on past": (coast([math.radians(36.0)], release_at=(math.radians(178.0), math.radians(2.9))), 0.25),
-    "two nudges (18, then 16 deg/s), no catch, at rest short of the mark": (coast([math.radians(18.0), math.radians(16.0)]), 0.25),
+    "one push to 24.7 deg/s, no catch: it coasts on past the mark": (coast([math.radians(24.7)]), 0.0),
+    "one push to 10.5 deg/s, no catch: it creeps through the mark and on": (coast([math.radians(10.5)]), 0.0),
+    "one push to 11.5 deg/s, no catch: it creeps through the mark and on": (coast([math.radians(11.5)]), 0.0),
+    "caught and let go on the mark still turning at 2.9 deg/s: it drifts on past": (coast([math.radians(36.0)], release_at=(math.radians(178.0), math.radians(2.9))), 0.0),
+    "two nudges (18, then 16 deg/s), no catch, at rest short of the mark": (coast([math.radians(18.0), math.radians(16.0)]), 0.0),
     "stopped dead by a hand from 36 deg/s, the stop 30 % into a step": (split(frac=0.3), 0.0),
     "stopped dead by a hand from 36 deg/s, the stop 50 % into a step": (split(frac=0.5), 0.0),
     "stopped dead by a hand from 36 deg/s, the stop 70 % into a step": (split(frac=0.7), 0.0),
     "stopped dead by a hand from 43 deg/s, the stop 50 % into a step": (split(rate=math.radians(43.0)), 0.0),
-    "turned slowly by hand at 10 deg/s and stopped on the mark": (slow(), 1.0),
-    "the honest turn, caught with the palm (fingertips 3 cm off the arm)": (trial(catch_gap=0.03), 1.0),
-    "braked to rest at 14 deg, then turned by hand at 8 deg/s to the mark": (early_brake(), 1.0),
-    "braked to rest at 14 deg, then turned by hand at 4.9 deg/s to the mark": (early_brake(math.radians(4.9)), 1.0),
+    "turned slowly by hand at 10 deg/s and stopped on the mark": (slow(), 0.0),
+    "the honest turn, caught with the palm (fingertips 3 cm off the arm)": (trial(catch_gap=0.03), 0.0),
+    "braked to rest at 14 deg, then turned by hand at 8 deg/s to the mark": (early_brake(), 0.0),
+    "braked to rest at 14 deg, then turned by hand at 4.9 deg/s to the mark": (early_brake(math.radians(4.9)), 0.0),
     "a rigid block at 185 deg from 36 deg/s, a 15 deg/s rebound caught on the mark (block 30 % into a step)": (bounce(math.radians(15.0), 0.3), 0.0),
     "the same, the block 50 % into a step": (bounce(math.radians(15.0), 0.5), 0.0),
     "the same, the block 80 % into a step": (bounce(math.radians(15.0), 0.8), 0.0),
