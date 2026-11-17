@@ -80,7 +80,20 @@ The demo takes 30.1 s of simulated time (601 steps), about 2 to 3 minutes of wal
 
 ## A real trial
 
-Hang the upper body (or a stand-in of the same mass and yaw inertia, 18.3 kg and 0.26 kg m2, with the shell's outline and its open back) from a ball-bearing swivel hook on a bench gantry, so that its centre of mass is 35 cm above the table at (45, 0). First measure its free spin-down: start it at about 40 deg/s and time it. Print the cover 100_04C from the maker's STEP in PA12 (about 117 g) and stand it on a foam rest at (26, -50), leaning back 15 degrees. Bench check of the press: with the body hung still on the mark and nobody holding it, press the fitted cover 3 cm off the hook's axis with a 5 N push gauge and time the turn it starts. Put a contrasting mark on each shoulder for the camera above, and log yaw at 20 Hz or faster. Mark the cover's 4 corners (two by the handle bar, two at its foot) and their places on the shell's rim; read each mark's offset from a photo square to the back, or with a feeler gauge. Keep people out of the body's sweep (its arms reach 21 cm from the hook's axis), and check the hook's rated load.
+Hang the upper body, in practice the low-cost stand-in below (`standin/`), from a ball-bearing swivel hook on a bench gantry, so that its centre of mass is 35 cm above the table at (45, 0). First measure its free spin-down: start it at about 40 deg/s and time it. Print the cover 100_04C from the maker's STEP in PA12 (about 117 g) and stand it on a foam rest at (26, -50), leaning back 15 degrees. Bench check of the press: with the body hung still on the mark and nobody holding it, press the fitted cover 3 cm off the hook's axis with a 5 N push gauge and time the turn it starts. Put a contrasting mark on each shoulder for the camera above, and log yaw at 20 Hz or faster. Mark the cover's 4 corners (two by the handle bar, two at its foot) and their places on the shell's rim; read each mark's offset from a photo square to the back, or with a feeler gauge. Keep people out of the body's sweep (its arms reach 21 cm from the hook's axis), and check the hook's rated load.
+
+## Stand-in for the suspended body (real trials)
+
+Nobody has to own an Asimov 1. `standin/drawing.txt` is the dimensioned build (about 60 to 90 USD; 117 g cover print); `standin/budget.py` does the arithmetic below. Axes: x forward, y left, z up, origin at the body's centre of mass, which hangs on the hook's axis. Targets from `task.py` (Menlo's URDF, `upper_body.npz`): 18.276 kg, centre of mass on the swivel axis, yaw inertia 0.2566 kg m2.
+
+- Torso: a 12 mm birch-plywood box, 220 x 250 x 380, back open, 3.06 kg with the cover stops and ballast cleats. The cover (Menlo 100_04C, printed from the STEP, 117 g) is pressed into its open back until its rim meets 12 x 10 mm plywood stops: the same seat the scene's bay gives it. Ballast, the "battery": 7 steel plates 10 x 100 x 100 (5.495 kg) stacked along x at x +6 cm, z +7 cm. Head: a 90 x 130 x 180 pine block (1.05 kg) at x +1.2, z +29 cm.
+- Arms: two 60 x 20 x 450 steel flat bars, 4.239 kg each (0.060 x 0.020 x 0.45 m x 7850 kg/m3), bolted to the sides, at x -5.3, y +-13.7, z -9 cm.
+- Mass: 3.06 + 5.495 + 1.053 + 2 x 4.239 = 18.09 kg; 0.19 kg of washers on the head makes 18.28 kg.
+- Centre of mass: Σ m x = 0 fixes the arms' x. With the ballast at x +6 cm, the arms sit at -5.3 cm (inside the real arm's -5.1 to +3.2 cm range, rounded); Σ m z = 0 gives -0.05 cm; y is 0 by symmetry.
+- Yaw inertia: Σ (own + m (x² + y²)) = 0.259 kg m2, +1.0 % on 0.2566. The arms carry 2 x 4.239 x 0.137² = 0.159 of it; their y was solved to land on the target.
+- Not matched: pitch and roll inertia, and the shell's real ledges (the cover seat is the same simplification as the scene's bay).
+- Hook: a ball-bearing swivel sling hook of 1 t or more, e.g. Yoke G80 swivel eye sling hook with ball bearing (code 113308, aimsindustrial.com.au), Crosby L-3322B, Gunnebo LKNK or Certex X100; hung through two 250 mm chain legs to eyebolts on the top panel.
+- Trim: weigh it (18.3 +-0.2 kg), hang it level, then measure the free spin-down as above. The hook's own spin-down differs from the scene's 0.005 friction; the measured value goes in the trial record.
 
 ## Sources
 

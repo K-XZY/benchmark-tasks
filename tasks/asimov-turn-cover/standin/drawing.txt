@@ -1,0 +1,30 @@
+Stand-in for Asimov 1's hung upper body (all mm; x forward, y left, z up; origin = the centre of mass, which hangs on the hook's axis)
+
+Cost: about 60 to 90 USD of plywood, bar, plate and hook, plus about 1 h of print time for the cover (117 g PA12 or PETG).
+
+TORSO BOX, 12 mm birch plywood, glued and screwed, outer 220 (x) x 250 (y) x 380 (z), back open.
+  Front panel 12 x 250 x 380 at x +105.5 to +117.5.  Sides 2 x (220 x 12 x 380).  Top and bottom 2 x (220 x 226 x 12).
+  Box spans x -102.5 to +117.5, y +-125, z -169 to +212 from the centre of mass (the torso hulls in Menlo's URDF: x -102 to +117, y +-125, z -169 to +212).
+COVER SEAT (the back-cover interface). The cover, Menlo part 100_04C, is printed from ASV1_100_04C.STEP
+  (github.com/menloresearch/asimov-1, mechanical/ASV1/100/FABRICATION/MJF_PA12/, CERN-OHL-S-2.0): 98 x 224 x 315 mm, 117 g, 8 M4 bolt holes,
+  handle bar and slot. Export the STEP to STL (FreeCAD or any CAD), keep the robot's orientation, print in PA12 or PETG, 3 perimeters, 20 % infill.
+  It sits inside the box's open back: the box's inner width 226 and height 356 take its 224 x 315 outline. Its seated place is the cover.npz pose:
+  its front rim at x +7, its back face at x -91.  Glue 12 x 10 mm plywood stops on the inside of the 2 sides, the top and the bottom with their
+  faces at x +7 (a 340 mm strip on each side, a 200 mm strip top and bottom); the cover is pressed in until its rim meets them, as the scene's bay stops it.
+  Bolts are left out, as in the scene. For a fit with bolts, drill the 8 holes through the printed cover (3.3 mm pilot into the stops) in 
+  place and fit M4 heat-set inserts; the task needs none.
+BALLAST (the "battery"): 7 mild-steel plates 10 x 100 x 100 (0.785 kg each, 5.495 kg), stacked along x from x +25 to +95 and centred at z +70,
+  y 0. Rest on 2 plywood cleats 20 x 12 x 70 screwed to the sides (top face at z +20), and strap with a cable tie or an M8 threaded rod through the plates and the sides.
+HEAD: pine block 90 (x) x 130 (y) x 180 (z), centre x +12, z +302 (it sits on the top panel), screwed to the top panel (2 x No 10 wood screws up through the top). Mass 1.05 kg.
+ARMS: 2 bars of 60 (x) x 20 (y) x 450 (z) mild-steel flat, 4.24 kg each; centre x -53, y +-137, z -90 (top at z +135, hands' end at z -315). 
+  Bolt each to the side with 2 M8 x 40 bolts at z +40 and z -50 through the side panel (washers as spacers so the bar's face clears the panel by 2 mm).
+  They are rigid, as the scene locks the arms straight.
+HANG: 2 forged M8 eyebolts through the top panel at x +8, y +-90, z +212; 2 chain legs of 250 mm (6 mm chain, 1 t WLL) to a ring on the hook.
+  Hook: Yoke G80 swivel eye sling hook with ball bearing, 7/8 mm chain size, supplier code 113308 as listed at aimsindustrial.com.au; check the working load limit in the supplier's table is at least 1 t; any ball-bearing
+  swivel sling hook of 1 t or more works, e.g. Crosby L-3322B 5 t, Gunnebo LKNK, Certex X100). Hang it from a beam hook or shackle on the gantry beam,
+  so that the centre of mass (budget.py) is 350 mm above the table at (450, 0).
+TRIM (do this before the first trial): weigh the finished stand-in on a luggage or crane scale (+-50 g): it must read 18.3 +-0.2 kg (add or remove fender washers
+  on the head; the eyebolts, screws and chain are weighed in with it, so the washers make up the rest). Hang it: it should hang level, the top panel horizontal within 1 degree, with its front facing the arms; if it tilts, slide the ballast
+  stack along x. Then run the free spin-down (start about 40 deg/s, time it) as the README says.
+Yaw inertia check, optional: hang it on a 3-wire (bifilar) or one thin-wire torsion pendulum and time 10 swings; I = T^2 m g r^2 / (4 pi^2 L) for the bifilar of wire spacing 2r and length L.
+Budget and checks: python standin/budget.py (mass 18.09 + 0.19 kg of washers = 18.28 kg, centre of mass within 0.5 mm, yaw inertia 0.259 vs 0.257 kg m2, +1.0 %).
