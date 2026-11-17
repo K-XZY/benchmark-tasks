@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="700" height="700" viewBox="0 0 700 700" font-family="sans-serif" font-size="12">
+<rect width="700" height="700" fill="white"/>
+<circle cx="330" cy="330" r="240" fill="#dfe3e8" stroke="black"/>
+<circle cx="330" cy="330" r="200" fill="none" stroke="#888" stroke-dasharray="6 4"/>
+<line x1="140.8" y1="395.0" x2="140.8" y2="265.0" stroke="#888" stroke-dasharray="6 4"/>
+<circle cx="136.8" cy="370" r="4" fill="black"/><text x="144.8" y="364">pin A (-48.3, -10) mm</text>
+<circle cx="136.8" cy="290" r="4" fill="black"/><text x="144.8" y="284">pin B (-48.3, 10) mm</text>
+<circle cx="330" cy="126" r="4" fill="black"/><text x="338" y="120">pin C (0, 51) mm</text>
+<text x="20" y="30" font-size="15">Stand-in chuck, top view. 6061 aluminium disc, diameter 120 mm, thickness 10 mm, faced flat.</text>
+<text x="20" y="50">Three 2 mm dowel pins (ISO 2338, h8) pressed into 2.0 mm reamed holes, ends set 0.4 mm proud of the face (feeler gauge).</text>
+<text x="20" y="70">Centres in mm from the disc centre, x toward the robot is -x: A (-48.3, -10), B (-48.3, +10), C (0, +51).</text>
+<text x="20" y="90">Dashed: a seated 100 mm wafer (flat 32.5 mm, 47.3 mm from its centre). Pin faces touch the flat at x = -47.3 and the rim at y = +50.</text>
+<text x="20" y="110">Suction: a 1 mm deep, 3 mm wide ring groove at diameter 60 mm and a 3 mm hole through the disc to a hose barb (small diaphragm pump).</text>
+<circle cx="330" cy="330" r="120" fill="none" stroke="#468" stroke-width="3" opacity="0.5"/>
+<text x="270" y="334">vacuum groove</text>
+<line x1="300" y1="640" x2="300" y2="640"/>
+<text x="20" y="660">Toward the robot is to the left of the page; the left pin is at the top.</text>
+</svg>
