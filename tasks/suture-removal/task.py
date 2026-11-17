@@ -235,7 +235,7 @@ class Stitch:
         closed = fb > 0.8 * 0.034
         if not closed and np.linalg.norm(tip - knot) < 0.005:
             self.open_near = self.steps  # open, the tips at the knot
-        if closed and not self.held and np.linalg.norm(tip - knot) < 0.0025 and self.steps - self.open_near <= 10 and not self.on_gauze and not self.stitch_dropped:  # closed on the knot within 0.5 s of being open there, not touched to it shut
+        if closed and not self.held and np.linalg.norm(tip - knot) < 0.003 and self.steps - self.open_near <= 10 and not self.on_gauze and not self.stitch_dropped:  # closed on the knot within 0.5 s of being open there, not touched to it shut
             self.held = True
         if self.held and not closed:
             self.held = False
@@ -246,7 +246,7 @@ class Stitch:
         rel = tip - knot0
         if self.held and not self.cut:
             up = float(np.clip(rel[2], 0.0, 0.006))
-            if rel[2] > 0.0045:
+            if rel[2] > 0.005:
                 self.broke = True  # pulled up past what the stitch takes before it is cut: torn through the skin
             m.set_target(env, "pad", "lift", up)
             m.set_target(env, "pad", "half", float(np.clip(rel[1] - 0.0005, 0.0, 0.004)))
@@ -332,13 +332,13 @@ def _tier(r) -> float:
     if not r or r["broke"] or r["dug"]:
         return 0.0
     s = 0.0
-    if r["lifted_max_mm"] >= 1.0:
+    if r["lifted_max_mm"] >= 2.0:
         s = 0.25
-    if s and r["cut"] and r["cut_side"] in ("far", "both") and r["cut_h_mm"] is not None and r["cut_h_mm"] <= 1.0:
+    if s and r["cut"] and r["cut_side"] in ("far", "both") and r["cut_h_mm"] is not None and r["cut_h_mm"] <= 2.0:
         s = 0.5
         if r["cut_side"] == "both":
             return s  # both legs cut: the buried part stays in the skin
-        if r["drawn"] >= 0.95 and r["gap_max_mm"] < 2.0:
+        if r["drawn"] >= 0.95 and r["gap_max_mm"] < 3.0:
             s = 0.75
             if r["on_gauze"] and all(r["in_rests"]) and r["clear"]:
                 s = 1.0
