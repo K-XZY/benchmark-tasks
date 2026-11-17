@@ -54,7 +54,7 @@ STILE_W = 0.040
 TRAVEL = 0.48  # its travel toward +y, the pull bar staying inside the service opening
 PANEL_MASS = 8.0  # 6.7 kg of glass (0.55 x 0.77 m x 6.35 mm at 2,500 kg/m^3) and its frame
 PULL_N = 10.0  # its closing pull: a simulation setting (a real unit's is read with a spring scale on the bar)
-DAMP = 22.0  # N s/m: its damper, a setting, so that it shuts from fully open in about 1.5 s and does not slam
+DAMP = 22.0  # N s/m: its damper, a setting, so that it shuts from 30 cm open in about 1 s and does not slam
 BAR_R, BAR_X, BAR_Y0, BAR_Z = 0.0125, 0.3443, -0.120, (0.20, 0.50)  # the pull bar: 25 mm round, 30 cm long, 3 cm off the glass, 3 cm from the stile's face
 
 # -- the cup: a 16 oz paper cold cup with a flat polystyrene lid, holding 0.47 kg of water; its origin at the centre of its base
