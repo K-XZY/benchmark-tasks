@@ -580,6 +580,15 @@ def run(task: str, out: str, modes: list[str], *, cameras: bool = True, record: 
     return results
 
 
+def holds(side: str, grip: Grip, pos) -> bool:
+    """Whether `side`'s arm holds `grip` with the TCP at `pos` (station frame, z above the table plus TABLE_TOP): IK from the ready pose within 2 mm and 2 degrees. No collisions."""
+    plan = ArmPlan([Waypoint(2.0, tuple(float(v) for v in pos), FINGER_OPEN, "go", grip)], station.BASES[side])
+    for t in (0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0):
+        plan.worst_ik_mm, plan.worst_ik_deg = 0.0, 0.0
+        plan.action7(t)
+    return plan.worst_ik_mm < 2.0 and plan.worst_ik_deg < 2.0
+
+
 def reach(x: float, y: float, height: float) -> None:
     """Which grips each arm can hold here. IK from the ready pose, within 2 mm and 2 degrees. No collisions."""
     top = TABLE_TOP
