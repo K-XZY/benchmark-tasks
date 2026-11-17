@@ -54,10 +54,10 @@ t.Trial._spring = lambda self, *a, **kw: None
 t.Trial.read = lambda self, env: env.seen
 
 
-def seen(roll=0.0, outer=-15.0, edge=(-0.05, 0.0, 0.30), tips="up", ears=(0.0, 0.0), moved=0.0, tilt=0.0, clear=0.2, yaw=0.0):
+def seen(roll=0.0, outer=-15.0, edge=(-0.05, 0.0, 0.30), tips="up", ears=(0.0, 0.0), moved=0.0, tilt=0.0, clear=0.2, yaw=0.0, off=False):
     z = 0.0005 if tips == "in" else 0.30
     tp = (np.array([HOLE, t.TAB_Y, z]), np.array([HOLE, -t.TAB_Y, z])) if tips != "one" else (np.array([HOLE, t.TAB_Y, 0.0005]), np.array([HOLE, -t.TAB_Y, 0.30]))
-    return t.Seen(outer, roll, edge, tp, ears, moved, tilt, clear, yaw)
+    return t.Seen(outer, roll, edge, tp, ears, moved, tilt, clear, yaw, off)
 
 
 EDGE_DOWN = (0.017, 0.0, 0.006)
@@ -98,18 +98,19 @@ check("0.75: both tabs in, then 19 steps only", run([(HOLD_SHORT, DOWN | {"tips"
 check("1.0: both tabs in, wall upright, hands clear, still 1 s", run([(N, DOWN | {"tips": "in"})]), 1.0)
 check("0.25: the panel only half over (edge not inside)", run([(N, dict(ROLLED, edge=(-0.05, 0.0, 0.3)))]), 0.0)
 
-# the effect rule: the box stays near its place, upright (negative cases)
-check("0: the box pushed 6 cm while all else is done", run([(N, DOWN | {"tips": "in", "moved": 0.06})]), 0.0)
-check("1.0: the box slid 3 cm (inside the 5 cm)", run([(N, DOWN | {"tips": "in", "moved": 0.03, "yaw": 5.0})]), 1.0)
-check("0: the box turned 15 degrees about the vertical", run([(N, DOWN | {"tips": "in", "yaw": 15.0})]), 0.0)
-check("0: the box tipped 12 degrees (or lifted: moved counts height)", run([(N, DOWN | {"tips": "in", "tilt": 12.0})]), 0.0)
-check("0: a tuck flap swung out 40 degrees", run([(N, DOWN | {"tips": "in", "ears": (0.0, 40.0)})]), 0.0)
+# the effect rule: only leaving the bench, or damage (a tuck flap forced out), zeroes the score; moving the box does not
+check("1.0: the box pushed 6 cm while all else is done", run([(N, DOWN | {"tips": "in", "moved": 0.06})]), 1.0)
+check("1.0: the box slid 3 cm", run([(N, DOWN | {"tips": "in", "moved": 0.03, "yaw": 5.0})]), 1.0)
+check("1.0: the box slid 20 cm and turned 15 degrees about the vertical, still on the bench", run([(N, DOWN | {"tips": "in", "moved": 0.20, "yaw": 15.0})]), 1.0)
+check("1.0: the box tipped 12 degrees, then locked", run([(N, DOWN | {"tips": "in", "tilt": 12.0})]), 1.0)
+check("0: the box off the bench while all else is done", run([(N, DOWN | {"tips": "in", "off": True})]), 0.0)
+check("0: a tuck flap swung out 40 degrees (damage)", run([(N, DOWN | {"tips": "in", "ears": (0.0, 40.0)})]), 0.0)
 
-# failures latch: carry the box off, do the act, bring it back
-check("0: box dragged 8 cm for 3 steps, then back, then the whole act", run([(3, {"moved": 0.08}), (N, DOWN | {"tips": "in"})]), 0.0)
-check("0: box tipped 20 degrees for 3 steps, then back, then the act", run([(3, {"tilt": 20.0}), (N, DOWN | {"tips": "in"})]), 0.0)
-check("0: box turned 30 degrees for 3 steps, then back, then the act", run([(3, {"yaw": 30.0}), (N, DOWN | {"tips": "in"})]), 0.0)
-check("0: a tab poked in its hole while the box was out of place, then back and down", run([(3, DOWN | {"moved": 0.08, "tips": "in"}), (N, DOWN)]), 0.0)
+# failures latch: the box leaves the bench or a flap is forced out, then the act is done
+check("0: box off the bench for 3 steps, then back, then the whole act", run([(3, {"off": True}), (N, DOWN | {"tips": "in"})]), 0.0)
+check("0: a flap forced out 40 degrees for 3 steps, then back, then the act", run([(3, {"ears": (40.0, 0.0)}), (N, DOWN | {"tips": "in"})]), 0.0)
+check("1.0: box dragged 8 cm, tipped 20 and turned 30 degrees for 3 steps, then back, then the act", run([(3, {"moved": 0.08, "tilt": 20.0, "yaw": 30.0}), (N, DOWN | {"tips": "in"})]), 1.0)
+check("0: a tab poked in its hole while the box was off the bench, then back and down", run([(3, DOWN | {"off": True, "tips": "in"}), (N, DOWN)]), 0.0)
 
 # the hands: the open lid and its tuck count as the box
 check("0.75: the end done, a fingertip 2 cm from the lid (clear measured to the lid too)", run([(N, DOWN | {"tips": "in", "clear": 0.02})]), 0.75)

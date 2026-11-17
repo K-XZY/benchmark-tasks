@@ -224,10 +224,11 @@ class Seen:
     free edge, middle. tips: each tab's tip. ears_deg: each tuck flap's opening, 0 folded in. moved: how far the box has moved from where
     it started. clear: the nearest fingertip to the box."""
 
-    def __init__(self, outer_deg, roll_deg, edge, tips, ears_deg, moved, tilt_deg, clear, yaw_deg=0.0):
+    def __init__(self, outer_deg, roll_deg, edge, tips, ears_deg, moved, tilt_deg, clear, yaw_deg=0.0, off_bench=False):
         self.outer_deg, self.roll_deg, self.edge, self.tips = float(outer_deg), float(roll_deg), np.asarray(edge, float), tuple(tips)
         self.ears_deg, self.moved, self.tilt_deg, self.clear = tuple(ears_deg), float(moved), float(tilt_deg), float(clear)
         self.yaw_deg = float(yaw_deg)
+        self.off_bench = bool(off_bench)  # the box's middle is past the bench top's edge, or has dropped below it
 
 
 def in_hole(tip, y: float) -> bool:
@@ -239,9 +240,10 @@ LADDER = gk.Ladder(("rolled", 0.25), ("down", 0.5), ("one_tab", 0.75), ("locked"
 
 
 def failed(s: Seen) -> bool:
-    """The box shoved more than 5 cm (any direction, lifting included), turned more than 10 degrees about the vertical, or tipped more
-    than 10 degrees; a tuck flap swung out of the end. Latched by the trial: once true at any step, the score stays 0."""
-    return bool(s.moved > 0.05 or s.tilt_deg > 10.0 or abs(s.yaw_deg) > 10.0 or max(abs(a) for a in s.ears_deg) > 30.0)
+    """The box leaves the bench (its middle past the bench top's edge, or dropped below it), or a tuck flap swings out of the end (damage: a
+    flap forced past 30 degrees). Sliding, turning and tipping the empty box are not failures: they do not stop an undamaged lock.
+    Latched by the trial: once true at any step, the score stays 0."""
+    return bool(s.off_bench or max(abs(a) for a in s.ears_deg) > 30.0)
 
 
 def judge(s: Seen, latched: tuple, still: bool, held: int, dead: bool = False) -> tuple[bool, float]:
@@ -291,8 +293,10 @@ class Trial:
         edge = box.to_local(on_link(env, "roll", (T / 2, 0.0, P_TOP)))[0]
         tl = box.to_local(on_link(env, "tab_l", (T / 2, TAB_Y, P_TOP + TAB_OUT)))[0]
         tr = box.to_local(on_link(env, "tab_r", (T / 2, -TAB_Y, P_TOP + TAB_OUT)))[0]
+        mid = box.pos + box.rotation() @ np.array([LX / 2, 0.0, H / 2])  # the box's middle, in the station frame
+        off = bool(not (BENCH_X[0] < mid[0] < BENCH_X[1] and abs(mid[1]) < BENCH_Y) or mid[2] < TOP - 0.03)
         return Seen(box.deg("outer"), box.deg("roll"), edge, (tl, tr), (box.deg("ear_l"), box.deg("ear_r")), float(np.linalg.norm(box.pos - self.start)),
-                    box.tilt_deg(), float(gap), math.degrees(math.atan2(box.rotation()[1, 0], box.rotation()[0, 0])))
+                    box.tilt_deg(), float(gap), math.degrees(math.atan2(box.rotation()[1, 0], box.rotation()[0, 0])), off)
 
     def step(self, env) -> None:
         self.steps += 1
@@ -374,6 +378,7 @@ def hold_tcp(origin, outer_deg: float, press: float = PRESS) -> np.ndarray:
     return np.asarray(origin, float) + face + normal * (TIP - press)
 
 
+BENCH_X, BENCH_Y = (0.0, 0.90), 0.60  # the 120 x 90 cm bench top from the arm bases: its near edge at x 0, 90 cm deep, 60 cm each side
 TILT_MIN = 30.0  # over the box the fingers stay tilted this far toward +x: straight down, the wrist (joint 4) is at its limit up there
 
 
