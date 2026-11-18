@@ -40,7 +40,8 @@ LOOKS = {
     "joint": m.Look(m.rgb(0.20, 0.20, 0.21), roughness=0.5),
     "gantry": m.Look(m.rgb(0.25, 0.27, 0.30), metallic=0.6, roughness=0.4),
     "chain": m.Look(m.rgb(0.70, 0.70, 0.72), metallic=0.9, roughness=0.3),
-    "bay": m.Look(m.rgb(0.12, 0.13, 0.14), roughness=0.7),  # the open back: the battery and boards inside, dark
+    "bay": m.Look(m.rgb(0.12, 0.13, 0.14), roughness=0.7),  # the open back: the battery and boards inside, dark (no collider)
+    "ledge": m.Look(m.rgb(0.55, 0.57, 0.60), roughness=0.5),  # the shell's rear-facing ledges the cover rests on
     "cover": m.Look(m.rgb(0.90, 0.90, 0.88), roughness=0.6),  # 100_04C, MJF PA12 like the shell
     "foam": m.Look(m.rgb(0.20, 0.35, 0.55), roughness=0.9),
 }
@@ -50,6 +51,7 @@ UB_COM = np.asarray(UB["com"], float)  # in the robot's pelvis frame
 UB_KG = float(UB["mass"])
 UB_I = np.asarray(UB["I"], float)
 NAMES = [str(n) for n in UB["names"]]
+SD = np.load(HERE / "seat.npz")  # the shell's ledges the cover touches (pads), and the cover's colliders, from Menlo's STEP files (dev/make_seat.py)
 CV = np.load(HERE / "cover.npz")  # the back cover 100_04C at its place (pelvis frame), its colliders, and the torso opened where it goes
 C0 = np.asarray(CV["cover_c0"], float)  # the cover's origin: the centre of its display mesh, pelvis frame
 CHECKS = np.asarray(CV["checks"], float)  # 4 points on the cover's outer corners (by the handle bar, and at the bottom), pelvis frame
@@ -57,7 +59,11 @@ SEAT_IN = 0.0  # m: pressed home, the cover sits at its fitted place (moved out 
 COVER_KG = 0.117  # 115.7 cm3 of MJF PA12 (1.01 g/cm3), from the STEP
 HOOK = np.array([0.45, 0.0])  # the swivel's axis, over the body's centre of mass
 COM_Z = TOP + 0.35  # the centre of mass's height: the hanging hands clear the table by about 3 cm
-SWIVEL_FRICTION = 0.005  # PhysX's joint friction coefficient: a free spin slows from 45 to 27.5 deg/s in 10 s; a real hook's spin-down is to be measured
+SWIVEL_TAU = float(os.environ.get("ASIMOV_SWIVEL_TAU", "20.5"))  # s: the swivel joint's own part of the drag (0.257 / 20.5 = 0.0125 N m s/rad). The
+# simulator also damps the body's spin by its default 0.05 per second (0.0129 N m s/rad), so the whole drag is 0.0254 N m s/rad, viscous, a
+# spin-down time constant of 10.1 s (measured: 50.1 to 30.6 deg/s in 5 s, the same ratio every 5 s). The variable is only for the tolerance check
+# in the README: 17.5 and 24.5 give whole time constants of 9.3 and 11.0 s, the ends of the band the real hook is tuned to
+SWIVEL_DAMPING = float(UB_I[2, 2]) / SWIVEL_TAU  # N m s/rad, no joint friction: the real hook is fitted with a magnetic brake tuned to the same spin-down
 MARK = math.pi  # the swivel's angle at the mark: the body authored facing the arms (angle 0), the mark its back to them
 
 
@@ -86,12 +92,14 @@ def _body_link():
         cols.append(m.col_hull(f"c_{n}", m.Mesh(hv, hf)))
     pieces = {f"band{i}": (f"band{i}_v", f"band{i}_f") for i in range(int(CV["n_bands"]))}
     pieces.update({"bay_l": ("bay_l_v", "bay_l_f"), "bay_r": ("bay_r_v", "bay_r_f")})
-    for k, (v, f) in pieces.items():
-        mesh = m.Mesh(_to_hung(CV[v]), np.asarray(CV[f], int))
-        parts.append((k, mesh, "bay"))
-        cols.append(m.col_hull(f"c_{k}", mesh))
+    for k, (v, f) in pieces.items():  # the battery and boards behind the cover: shown, with no collider (the cover meets only the ledges)
+        parts.append((k, m.Mesh(_to_hung(CV[v]), np.asarray(CV[f], int)), "bay"))
+    for i in range(int(SD["n_pads"])):  # the shell's ledges, from its STEP file: the cover's only stops
+        mesh = m.Mesh(_to_hung(SD[f"pad{i}_v"]), np.asarray(SD[f"pad{i}_f"], int))
+        parts.append((f"pad{i}", mesh, "ledge"))
+        cols.append(m.col_hull(f"c_pad{i}", mesh))
     ev = np.linalg.eigvalsh(UB_I)
-    return m.hinge("body", "Z", (0.0, 0.0, 0.0), -math.inf, math.inf, parts, cols, mass=UB_KG, damping=0.0, friction=SWIVEL_FRICTION, gravity=True,
+    return m.hinge("body", "Z", (0.0, 0.0, 0.0), -math.inf, math.inf, parts, cols, mass=UB_KG, damping=SWIVEL_DAMPING, friction=0.0, gravity=True,
                    com=(0.0, 0.0, 0.0), inertia=(float(UB_I[0, 0]), float(UB_I[1, 1]), float(UB_I[2, 2])))
 
 
@@ -116,17 +124,19 @@ def _ry(b):
 
 
 def _slab_meshes(shift=(0.0, 0.0, 0.0)):
-    """The cover's colliders: 3 mm boxes along its outer profile, in the cover's frame (pelvis axes, origin C0), the handle slot left open."""
+    """The cover's colliders: its outer face, 2.5 mm thick, in 22 mm cells split by the way the face turns (convex hulls of the maker's mesh),
+    in the cover's frame (pelvis axes, origin C0); the handle slot and the handle bar are left to the handle box."""
     out = []
-    for c, (L, W, H), p in zip(CV["slab_c"], CV["slab_size"], CV["slab_pitch"]):
-        b = m.box((H, W, L))
-        v = b.v @ _ry(float(p)).T + (np.asarray(c, float) - C0) + np.asarray(shift, float)
-        out.append(m.Mesh(v, b.f))
+    for k in range(int(SD["n_cells"])):
+        v, f = np.asarray(SD[f"cc{k}_v"], float), np.asarray(SD[f"cc{k}_f"], int)
+        if abs(np.einsum("ij,ij->i", v[f[:, 0]], np.cross(v[f[:, 1]], v[f[:, 2]])).sum()) / 6.0 < 3e-8:
+            continue  # slivers under 30 mm3 at the edge of a split cell: no collider
+        out.append(m.Mesh(v - C0 + np.asarray(shift, float), f))
     return out
 
 
-HANDLE = (np.array([-0.124, 0.003, 0.391]), (0.012, 0.050, 0.022))  # where the pads bear on the handle bar: flat above and below, 22 mm tall (pelvis
-# frame, centre and size). The boxes along the profile are pitched, so flat pads would meet them on an edge, a hinge the cover would hang from
+HANDLE = (np.array([-0.124, 0.003, 0.391]), (0.012, 0.050, 0.022))  # where the finger pads bear on the handle bar: flat above and below, 22 mm
+# tall (pelvis frame, centre and size). The bar itself is pitched, so flat pads would meet it on an edge, a hinge the cover would hang from
 
 
 def _handle_mesh():
@@ -139,10 +149,15 @@ TILT = math.radians(15.0)  # the cover leans back on its rest at 15 degrees
 STAND_XY = np.array([0.26, -0.50])  # the cover rest, by the right arm, clear of the body's sweep (0.215 m round the swivel)
 
 
+def _rest_ids():
+    """The rest's pieces: those between the cover's side wings (within 9 cm of its middle), so the wings hang free either side of it."""
+    return [i for i in range(int(SD["n_rest"])) if float(np.abs(np.asarray(SD[f"rs{i}_v"])[:, 1]).max()) < 0.09]
+
+
 def _stand():
     """A foam rest shaped to the robot's back, leaning back 15 degrees, with a ledge under the cover's bottom edge, on a foam base."""
     R = _ry(TILT)
-    rests = [(np.asarray(CV[f"band{i}_v"], float) - C0 - [SEAT_IN, 0.0, 0.0]) @ R.T for i in range(int(CV["n_bands"]))]
+    rests = [(np.asarray(SD[f"rs{i}_v"], float) - C0) @ R.T for i in _rest_ids()]
     rest = np.vstack(rests)
     bot = float(np.asarray(CV["cover_v"])[:, 2].min()) - C0[2]
     ledge = m.box((0.06, 0.12, 0.012), (-0.117 - C0[0] + 0.022, 0.0, bot - 0.007))
@@ -152,7 +167,7 @@ def _stand():
     base_h = 0.02
     z0 = TOP + base_h - low  # the stand's origin height: the rest and ledge sit on the base
     base = m.box((hi[0] - lo[0] + 0.02, hi[1] - lo[1] + 0.02, base_h + 0.004), ((hi[0] + lo[0]) / 2, (hi[1] + lo[1]) / 2, low - base_h / 2 + 0.002))
-    rest_ms = [m.Mesh(v, np.asarray(CV[f"band{i}_f"], int)) for i, v in enumerate(rests)]
+    rest_ms = [m.Mesh(v, np.asarray(SD[f"rs{i}_f"], int)) for i, v in zip(_rest_ids(), rests)]
     parts = [(f"rest{i}", rm, "foam") for i, rm in enumerate(rest_ms)] + [("ledge", ledge, "foam"), ("base", base, "foam")]
     cols = [m.col_hull(f"c_rest{i}", rm) for i, rm in enumerate(rest_ms)] + [m.col_hull("c_ledge", ledge), m.col_hull("c_base", base)]
     return z0, parts, cols
@@ -189,7 +204,7 @@ def cover_error(cover_state, ang) -> tuple[float, float]:
 
 REST_RATE, SPIN_RATE = math.radians(1.0), math.radians(20.0)  # still (scored); left spinning (a zero)
 MARK_TOL, STOP_RATE = math.radians(10.0), math.radians(5.0)  # traced only, not scored: near the half turn; stopped
-DRAG_TAU = 20.0  # s: the swivel's spin-down time constant (a free spin from 45 deg/s: 27.5 after 10 s, 13 after 25 s): a body turning at w coasts on about w x 20 s
+DRAG_TAU = 20.5  # s: traced only: a body turning at w coasts on at most about w x 20.5 s (the whole drag's time constant is 10.1 s, so this is generous)
 TURN_MIN = math.radians(90.0)  # traced only, not scored
 NEAR = 0.05  # a fingertip point within 5 cm of the body's colliders: a hand (fingers or palm) may be on it
 FAST = math.radians(10.0)  # a collision counts while the body turns faster than this
@@ -204,7 +219,7 @@ def _planes():
     point's largest plane value over a hull is a lower bound on its distance outside that hull."""
     out = []
     eqs = [np.asarray(UB[f"heq_{n}"], float) for n in NAMES if n != "waist_yaw_link"]
-    eqs += [np.asarray(CV[f"t_{k}_eq"], float) for k in TORSO_PIECES] + [np.asarray(CV[k], float) for k in [f"band{i}_eq" for i in range(int(CV["n_bands"]))] + ["bay_l_eq", "bay_r_eq"]]  # the torso as its colliders are now
+    eqs += [np.asarray(CV[f"t_{k}_eq"], float) for k in TORSO_PIECES] + [np.asarray(SD[f"pad{i}_eq"], float) for i in range(int(SD["n_pads"]))]  # the torso as its colliders are now
     for eq in eqs:
         nrm, off = eq[:, :3], eq[:, 3]
         # pelvis p = flip(h) + com, flip(x, y, z) = (-x, -y, z): n.p + d = (n * flip) . h + (n . com + d)
@@ -276,7 +291,12 @@ class Trial:
                    and abs(self.rate) < REST_RATE)  # turned 180 degrees net, either way round, still, and staying there: past it, or a turn more, is not 180
         self.hold_mark.step(on_mark)
         self.on_mark_now = self.hold_mark.count >= HOLD_STEPS
-        self.cover_gap, self.cover_ang = cover_error(m.state(env, "cover"), ang)
+        cst = m.state(env, "cover")
+        self.cover_gap, self.cover_ang = cover_error(cst, ang)
+        if TRACE and self.n in (1, 3, 10, 30, 60, 100):
+            Rc = cst.rotation()
+            print(f"[asimov] settle {self.n}: cover {np.round(np.asarray(cst.pos, float), 4).tolist()} (start {np.round(COVER_START, 4).tolist()}), pitch "
+                  f"{math.degrees(math.atan2(Rc[0, 2], Rc[2, 2])):.1f} deg (start {math.degrees(TILT):.1f}), roll {math.degrees(math.atan2(Rc[2, 1], Rc[1, 1])):.1f}", flush=True)
         still = abs(self.rate) < REST_RATE
         self.hold_on.step(still and self.cover_gap <= ON_POS and self.cover_ang <= ON_ANG)
         self.hold_seat.step(still and self.cover_gap <= SEAT_POS and self.cover_ang <= SEAT_ANG)
@@ -427,6 +447,40 @@ def _rz(a):
     return np.array([[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]])
 
 
+def _tr(ctx, gen, tag, every=5):
+    """Run a primitive, printing every few steps where the cover is and how it sits in the right hand (debug trace only)."""
+    k = 0
+    for _ in gen:
+        if TRACE and k % every == 0:
+            cs = ctx.state("cover")
+            R = cs.rotation()
+            bar = cs.to_world(BAR - C0)[0]
+            tcp = ctx.right.tcp()
+            print(f"[asimov] {tag} {k}: cover {np.round(np.asarray(cs.pos, float), 4).tolist()}, pitch {math.degrees(math.atan2(R[0, 2], R[2, 2])):.1f}, "
+                  f"roll {math.degrees(math.atan2(R[2, 1], R[1, 1])):.1f}, yaw {math.degrees(math.atan2(R[1, 0], R[0, 0])):.1f} deg; bar - tcp {np.round(1000 * (bar - tcp), 1).tolist()} mm", flush=True)
+        k += 1
+        yield
+
+
+def _rotvec(R) -> np.ndarray:
+    """The rotation vector (axis times angle, rad) of a rotation matrix."""
+    a = math.acos(max(-1.0, min(1.0, (float(np.trace(R)) - 1.0) / 2.0)))
+    if a < 1e-9:
+        return np.zeros(3)
+    w = np.array([R[2, 1] - R[1, 2], R[0, 2] - R[2, 0], R[1, 0] - R[0, 1]])
+    return w / (2.0 * math.sin(a)) * a
+
+
+def _rodrigues(v) -> np.ndarray:
+    """The rotation matrix of a rotation vector."""
+    a = float(np.linalg.norm(v))
+    if a < 1e-12:
+        return np.eye(3)
+    k = np.asarray(v, float) / a
+    K = np.array([[0.0, -k[2], k[1]], [k[2], 0.0, -k[0]], [-k[1], k[0], 0.0]])
+    return np.eye(3) + math.sin(a) * K + (1.0 - math.cos(a)) * K @ K
+
+
 def bar_grip(R_cover):
     """The right hand on the handle bar: pointing into the cover (its +x), fingers closing up and down across the bar."""
     return d._as_grip(R_cover @ _rx90() @ d.level(0.0).rot)
@@ -469,54 +523,60 @@ def cover_phase(ctx, hold=True):
     yield from r.move(bar0, t=1.0, label="the open fingers over and under the bar, the lower one in the slot")
     if TRACE:
         print(f"[asimov] at the bar, open: TCP {np.round(r.tcp(), 4)}, bar {np.round(bar0, 4)}", flush=True)
-    yield from r.move(bar0, finger=bar_w, t=0.6, label="grip the handle bar")
+    yield from _tr(ctx, r.move(bar0, finger=bar_w, t=0.6, label="grip the handle bar"), "grip")
     if TRACE:
         print(f"[asimov] bar grip: TCP {np.round(r.tcp(), 4)}, bar {np.round(bar0, 4)}, cover at {np.round(ctx.state('cover').pos, 4)}", flush=True)
-    yield from r.move(bar0 + [-0.02, 0.0, 0.04], t=0.8, label="lift the cover off its ledge")
+    yield from _tr(ctx, r.move(bar0 + [-0.02, 0.0, 0.04], t=0.8, label="lift the cover off its ledge"), "lift")
     if TRACE:
         print(f"[asimov] lifted: TCP {np.round(r.tcp(), 4)}, cover at {np.round(ctx.state('cover').pos, 4)} (was {np.round(cs.pos, 4)})", flush=True)
     if ctx.mode == "pick":
         for _ in range(20):
             yield
         return
-    # carry it square to the back, 10 cm out, then straight in
+    # off the rest: out of its hollow first (the rest stands inside the shell, between its wings), then up clear of it, and only then upright
     ang = ctx.state("upper").joint("body")
     Rb = _rz(ang - math.pi)  # the body's turn from the exact mark
     g1 = bar_grip(Rb)
     into = Rb[:, 0]
     seat = body_point(BAR + [SEAT_IN, 0.0, 0.0], ang)
-    yield from r.move(bar0 + [-0.02, 0.0, 0.12], t=1.0, label="up off the rest")
-    yield from r.move((bar0 + seat) / 2 + [-0.08, 0.0, 0.08], grip=g1, t=1.5, label="carry it over, turning it upright")
-    yield from r.move(seat - 0.10 * into + [0.0, 0.0, 0.03], t=1.2, label="square to the back, 10 cm out")
-    yield from r.move(seat - 0.10 * into, t=0.8, label="line it up with the open back")
-    # the arm sags under the cover, and the cover sits in the fingers a little off where the hand meant to take it, so the hand steers by the
-    # cover itself, as a camera on it would: its handle bar's place, corrected a little each step
+    yield from _tr(ctx, r.move(bar0 + [-0.10, 0.0, 0.08], t=1.0, label="draw it out of the rest"), "out")
+    yield from _tr(ctx, r.move(bar0 + [-0.10, 0.0, 0.16], t=0.8, label="up, clear of the rest"), "up")
+    yield from _tr(ctx, r.move((bar0 + seat) / 2 + [-0.08, 0.0, 0.06], grip=g1, t=1.5, label="carry it over, turning it upright"), "carry")
+    yield from _tr(ctx, r.move(seat - 0.10 * into + [0.0, 0.0, 0.03], t=1.2, label="square to the back, 10 cm out"), "square")
+    yield from _tr(ctx, r.move(seat - 0.10 * into, t=0.8, label="line it up with the open back"), "lineup")
+    # The cover sits in the fingers a little off where the hand meant to take it, and turns in them when it is carried or meets the ledges, so
+    # the hand steers by the cover itself, as a camera on it would: each step it turns by part of the cover's own error from its place's
+    # orientation, and shifts by part of its handle bar's error from its place. First 1.5 s squaring it up 10 cm out, then 2.5 s straight in
+    # onto the ledges, then held there (the trial ends once it has sat on its place 1 s).
     corr = np.zeros(3)
-    ang = ctx.state("upper").joint("body")
-    rel = _rz(ang - math.pi).T @ ctx.state("cover").rotation()
-    lean = math.atan2(rel[0, 2], rel[2, 2])  # how far the cover leans in the fingers about the bar: its foot out (+) or in (-)
-    if TRACE:
-        print(f"[asimov] lined up: the cover leans {math.degrees(lean):.2f} deg in the fingers; the hand turns it back", flush=True)
-    roll = 0.0
-    for k in range(200):  # 10 cm straight in over 2 s, following the body if it has moved, then held on its place (the trial ends once it has sat there 1 s)
+    Rh = g1.rot.copy()
+    for k in range(260):
         ang = ctx.state("upper").joint("body")
         Rb = _rz(ang - math.pi)
         into = Rb[:, 0]
         seat = body_point(BAR + [SEAT_IN, 0.0, 0.0], ang)
-        u = min(1.0, (k + 1) / 40)
-        goal = seat - 0.10 * (1 - u) * into  # the bar to its place: the cover hangs from it and its weight swings its foot in against the bay
+        u = 0.0 if k < 30 else min(1.0, (k - 29) / 50)
+        goal = seat - 0.10 * (1 - u) * into
         cs = ctx.state("cover")
         held = cs.to_world(BAR - C0)[0]
-        corr += 0.08 * (goal - held) * np.array([0.0 if u < 1.0 else 1.0, 1.0, 1.0])  # along the push only once there
-        corr = np.clip(corr, -0.03, 0.03)
-        if u >= 1.0:  # on its place: turn the foot in by what the cover itself still leans, a little each step, within 5 degrees
+        err = goal - held
+        if u < 1.0:
+            err = err - into * float(err @ into)  # along the push only once there
+        corr = corr + 0.08 * err
+        c_in = float(np.clip(corr @ into, -0.01, 0.01))
+        corr = np.clip(corr - into * float(corr @ into), -0.03, 0.03) + into * c_in
+        rv = _rotvec(cs.rotation() @ Rb.T)  # the cover's turn off its place's orientation, world frame
+        Rh = _rodrigues(-0.15 * rv) @ Rh
+        off = _rotvec(Rh @ bar_grip(Rb).rot.T)  # keep the hand within 15 degrees of square
+        if np.linalg.norm(off) > math.radians(15.0):
+            Rh = _rodrigues(off * (math.radians(15.0) / np.linalg.norm(off) - 1.0)) @ Rh
+        if TRACE and k % 5 == 0:
             rel = Rb.T @ cs.rotation()
-            lean = float(np.clip(lean + 0.05 * math.atan2(rel[0, 2], rel[2, 2]), -math.radians(5.0), math.radians(5.0)))
-            roll = float(np.clip(roll + 0.05 * math.atan2(rel[2, 1], rel[1, 1]), -math.radians(5.0), math.radians(5.0)))  # turned in its own plane
-            if TRACE and k % 5 == 0:
-                print(f"[asimov] press {k}: cover lean {math.degrees(math.atan2(rel[0, 2], rel[2, 2])):.2f} deg (hand {math.degrees(lean):.2f}), roll {math.degrees(math.atan2(rel[2, 1], rel[1, 1])):.2f} (hand {math.degrees(roll):.2f}), bar off {np.round(1000 * (held - goal), 1)} mm", flush=True)
-        yield from r.move(goal + corr, grip=d._as_grip(Rb @ _rxa(-roll) @ _ry(-lean) @ _rx90() @ d.level(0.0).rot), t=DT, label="press the cover home")
-        if TRACE and k == 79:
+            print(f"[asimov] press {k}: cover off its place's turn by {math.degrees(np.linalg.norm(rv)):.2f} deg (lean {math.degrees(math.atan2(rel[0, 2], rel[2, 2])):.2f}, "
+                  f"roll {math.degrees(math.atan2(rel[2, 1], rel[1, 1])):.2f}, yaw {math.degrees(math.atan2(rel[1, 0], rel[0, 0])):.2f}), hand {math.degrees(np.linalg.norm(off)):.1f} deg off square, "
+                  f"bar off {np.round(1000 * (held - goal), 1)} mm, push {1000 * c_in:.1f} mm", flush=True)
+        yield from r.move(goal + corr, grip=d._as_grip(Rh), t=DT, label="press the cover home")
+        if TRACE and k == 109:
             cs = ctx.state("cover")
             now = cs.to_world(CHECKS - C0)
             place = body_point(CHECKS + [SEAT_IN, 0.0, 0.0], ang)
