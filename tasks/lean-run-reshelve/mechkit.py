@@ -710,6 +710,43 @@ def hand_body(environment) -> np.ndarray:
     return np.array(out)
 
 
+_CONTACT: dict = {}
+FINGER_LINKS = ("tip_left", "tip_right")  # the YAM gripper's two finger bodies
+
+
+def _finger_paths(robot) -> list[str]:
+    """Prim paths of the finger links of one arm (`tip_left`, `tip_right`)."""
+    paths = list(robot.root_view.link_paths[0])
+    names = list(robot.body_names)
+    out = [p for n, p in zip(names, paths) if n in FINGER_LINKS]
+    if os.environ.get("MECHKIT_BODIES"):
+        print(f"[mechkit] {robot.cfg.prim_path} bodies {names}; fingers {out}", flush=True)
+    return out
+
+
+def contact_forces(environment, parts: list[str]) -> np.ndarray:
+    """The force (N) each arm's finger links press on each named free part, as the simulator's contact reports give it at the last physics step.
+    Shape (len(parts), 2): the left arm, then the right. Contact reports are read from PhysX's contact view (the parts are spawned with their
+    contact reporter on); nothing in the scene changes."""
+    base = environment.unwrapped
+    key = (id(base), tuple(parts))
+    if key not in _CONTACT:
+        view_ = base.sim.physics_sim_view
+        fingers = [_finger_paths(base.scene[f"{side}_robot"]) for side in ("left", "right")]
+        n = len(fingers[0])
+        assert n and len(fingers[1]) == n, f"finger links not found: {fingers}"
+        paths = [str(base.scene[p].root_view.prim_paths[0]) for p in parts]
+        filt = fingers[0] + fingers[1]
+        view = view_.create_rigid_contact_view(paths, filter_patterns=[filt] * len(paths), max_contact_data_count=512 * len(paths))
+        _CONTACT[key] = (view, n, 1.0 / float(base.sim.get_physics_dt()))
+    view, n, _ = _CONTACT[key]
+    dt = float(base.sim.get_physics_dt())
+    mat = view.get_contact_force_matrix(dt=dt)
+    mat = np.asarray(mat.numpy() if hasattr(mat, "numpy") else mat.detach().cpu().numpy(), float).reshape(len(parts), 2 * n, 3)
+    mag = np.linalg.norm(mat, axis=2)
+    return np.stack([mag[:, :n].sum(axis=1), mag[:, n:].sum(axis=1)], axis=1)
+
+
 # -- changing a mechanism while it runs -------------------------------------------------------
 
 _TOUCHED: set[tuple[str, str]] = set()

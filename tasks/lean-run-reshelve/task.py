@@ -81,8 +81,9 @@ ENTERED = 0.03  # the fore-edge at least this far past the neighbours' spines
 END_MOVED = 0.006  # the bookend moved (in any direction) this far from its mark: the set-up was changed
 END_TURN_DEG = 5.0  # or turned this far from its start pose, about any axis
 SLOT_TOL = 0.015  # every run book's spine within this of the spine line, and (plus its lean) its place across the row within 1 cm of its slot
-HAND_NEAR = (0.04, 0.06)  # the hold: one hand within 4 cm of the run while the other is within 6 cm of the green book, ...
-HOLD_NEED = 20  # ... with every run book within RUN_SEATED_DEG of upright, for 1 s in all
+CONTACT_N = 0.1  # the hold: a finger of one hand presses on a run book with at least this force (N), read from the simulator's contacts ...
+ENTER_AT = 0.005  # ... at every step from the green book's fore-edge passing this far beyond the run's spines (entering the gap) ...
+# ... until its spine is within FLUSH of theirs (seated), with every run book within RUN_SEATED_DEG of upright; latched: one lapse closes credit above 0.5
 SPINE_YAW = math.sin(math.radians(6.0))
 CLEAR = 0.03  # every fingertip at least this far from every book and the bookend
 STILL = 0.01  # m/s: every book and the bookend slower than this ...
@@ -369,7 +370,7 @@ class Trial:
         self.speeds = collections.deque(maxlen=STILL_STEPS)
         self.held, self.last_rung = 0, None
         self.score, self.full = 0.0, False
-        self.ever_failed, self.held_steps = False, 0
+        self.ever_failed, self.travel_steps, self.lapsed, self.pressed = False, 0, False, 0.0
         self.end_r0 = None
         self.tilts = collections.deque(maxlen=STILL_STEPS)
         self.r: dict = {}
@@ -393,26 +394,26 @@ class Trial:
                  body=m.hand_body(env), end_r0=self.end_r0)
         _, r = judge(s, still, 0)
         self.ever_failed |= bool(r["fallen"])  # a run book once knocked over stays failed, even if it is stood up again
-        near = [(float(box_distance(s.tips[i:i + 12], pn_, Rn_, h_).min())) for i in (0, 12) for pn_, Rn_, h_ in
-                [(new.pos, new.rotation(), (NEW_D / 2, NEW_T / 2, NEW_H / 2))]]
-        runs = [float(min(box_distance(s.tips[i:i + 12], o.pos, o.rotation(), (RUN_D / 2, t_ / 2, RUN_H / 2)).min() for o, t_ in zip(run, RUN_T)))
-                for i in (0, 12)]
-        if any(runs[i] < HAND_NEAR[0] and near[1 - i] < HAND_NEAR[1] for i in (0, 1)) and max(r["run_tilt"]) <= RUN_SEATED_DEG:
-            self.held_steps += 1
+        force = m.contact_forces(env, ["run0", "run1", "run2"]).sum(axis=0)  # N the left, then the right fingers press on the run
+        self.pressed = float(force.max())
+        if ENTER_AT <= r["depth_in"] < NEW_D - FLUSH:  # the green book's travel: entering the gap, not yet seated
+            self.travel_steps += 1
+            if self.pressed < CONTACT_N or max(r["run_tilt"]) > RUN_SEATED_DEG:
+                self.lapsed = True  # a step in the travel with no finger on the run, or the run not held upright: no credit above 0.5, for the rest of the trial
         if r["at_rest"] and r["rung"] == self.last_rung:
             self.held += 1
         else:
             self.held = 1 if r["at_rest"] else 0
         self.last_rung = r["rung"]
         self.score, self.r = judge(s, still, self.held)
-        if self.ever_failed or (self.held_steps < HOLD_NEED and self.score > 0.5):
-            self.score = 0.0 if self.ever_failed else 0.5  # no hold, no credit above 0.5
+        if self.ever_failed or ((self.lapsed or self.travel_steps == 0) and self.score > 0.5):
+            self.score = 0.0 if self.ever_failed else 0.5  # no finger on the run through the whole travel, no credit above 0.5
         self.full = self.score >= 1.0
         log = os.environ.get("RESHELVE_LOG")
         if log and self.steps % int(log) == 0:
             print(f"[shelf] step {self.steps}: run lean {[round(v, 1) for v in r['run_lean']]} new tilt {r['new_tilt']:.1f} proud {r['proud'] * 1000:.0f} mm "
                   f"in_gap {r['in_gap']} on_shelf {r['on_shelf']} end moved {r['end_moved'] * 1000:.1f} mm clear {r['clear'] * 1000:.0f} mm "
-                  f"speed {sp:.3f} rung {r['rung']} held {self.held} hold {self.held_steps} score {self.score}", flush=True)
+                  f"speed {sp:.3f} rung {r['rung']} held {self.held} pressed {self.pressed:.2f} N travel {self.travel_steps} lapsed {self.lapsed} score {self.score}", flush=True)
 
 
 TRIAL = Trial()
@@ -422,7 +423,7 @@ m.on_reset(TRIAL.reset)
 
 
 def success(objects) -> bool:
-    """The green book in, spine flush within 10 mm, it and the run within 8 degrees of upright, nothing fallen, the bookend on its mark,
+    """The green book in, spine flush within 10 mm, a finger of one hand on the run through its whole travel, it and the run within 8 degrees of upright, nothing fallen, the bookend on its mark,
     held 2 s at rest with both hands 3 cm clear."""
     return TRIAL.score >= 1.0
 
@@ -451,7 +452,7 @@ def demo_script(ctx):
     Then the right hand lets go and the run settles against the green book.
     TASK_DEMO: full; still; none; gate1 (push the run upright, hold 4 s, let go: the run falls back); one_hand (one hand at a time: the right
     pushes the run upright and lets go, then the left brings the book); no_hold (the left brings the book with no hold); early_out (the
-    right lets go when the book is 4 cm in); proud (the spine left 3 cm out); hands_on (the left hand stays on the spine)."""
+    right lets go when the book is 4 cm in); hover (the right fingers 2 cm off the run once it is upright, near it and never on it, while the left brings the book); proud (the spine left 3 cm out); hands_on (the left hand stays on the spine)."""
     import demokit as d
     from yam_arena.constants import FINGER_CLOSED, FINGER_OPEN, READY
 
@@ -496,12 +497,15 @@ def demo_script(ctx):
         yield from arm.servo(start, timeout=1.0, label="hold: in")
         c = arm.at() + arm.trim
         aim = -0.3  # degrees: the run a little past upright, toward the packed books
-        k, y_up = 0, None
+        k, y_up, hov = 0, None, None
         while not until():
             e = run_lean() - aim
             c = c + np.array([0.0, float(np.clip(0.0003 * e, -0.002, 0.003)), 0.0])
             if y_up is not None:
                 c[1] = float(np.clip(c[1], y_up - 0.006, y_up + 0.008))  # no wind-up against the packed books
+            if ctx.mode == "hover" and flags["held"]:  # the lazy route: the fingers 2 cm off the end book's head, near the run but never on it
+                hov = c + np.array([0.0, -0.02, 0.0]) if hov is None else hov
+                c = hov
             arm._solve(c, g_hold.rot)
             k += 1
             if y_up is None and e < 0.5:

@@ -75,42 +75,43 @@ def green(proud=0.0, tilt=3.0, y=None, R=None, z=None):
 END0 = np.array([t.X_S + t.END_X / 2, t.Y_PLATE, TOP + t.Z_B])
 
 
-def state(new=None, run=None, end=None, tips=AWAY, vel=0.0, body=None):
+def state(new=None, run=None, end=None, tips=AWAY, vel=0.0, body=None, force=(0.0, 0.0)):
     new = green() if new is None else new
     run = run_upright() if run is None else run
     end = (END0, np.eye(3)) if end is None else end
-    return {"newbook": S(*new, vel=vel), "run0": S(*run[0]), "run1": S(*run[1]), "run2": S(*run[2]), "bookend": S(*end), "tips": np.asarray(tips, float), **({} if body is None else {"body": body})}
+    return {"force": np.asarray(force, float), "newbook": S(*new, vel=vel), "run0": S(*run[0]), "run1": S(*run[1]), "run2": S(*run[2]), "bookend": S(*end), "tips": np.asarray(tips, float), **({} if body is None else {"body": body})}
 
 
 FAR = np.array([[0.32, 0.305, TOP + 0.5]] * 15 + [[0.32, -0.305, TOP + 0.5]] * 15)  # forearms away from everything
 
 
-def hold_state():
-    """One step of the hold: the right hand's fingertips on the end book's head, the left hand's at the green book."""
-    tips = AWAY.copy()
-    tips[12:] = [t.X_S + 0.07, t.upright_faces()[2][0] - 0.01, TOP + t.Z_S + 0.22]
-    tips[:12] = [t.X_S + 0.05, t.SLOT_Y, TOP + t.Z_S + 0.19]
-    return state(new=green(proud=0.06, tilt=0.0), run=run_upright(lean=0.5), tips=tips)
+HELD = (0.0, 1.3)  # N the left and right fingers press on the run: the right hand holds it
 
 
-def play(states, steps: int = 70, hold: bool = True, hold_steps: int | None = None, hold_run=None) -> float:
-    """Feed the same state (or a list) for `steps` steps; the bookend's mark is where it stood on the first step of a run that starts at
-    the true start."""
+def travel(force=HELD, lapse=None, stop=None, run=None, start=0.12, n=40):
+    """The green book's travel: its spine from `start` m proud of the run's down to flush, `n` steps, the run upright, the fingers pressing
+    `force` on the run; the steps in `lapse` (a range) have no contact, and from step `stop` on, none."""
+    out = []
+    for k in range(n):
+        f = (0.0, 0.0) if (lapse is not None and k in lapse) or (stop is not None and k >= stop) else force
+        out.append(state(new=green(proud=start * (1.0 - (k + 1) / n), tilt=0.0), run=run_upright(lean=0.5) if run is None else run, force=f))
+    return out
+
+
+def play(states, steps: int = 70, hold: bool = True, hold_steps=None, hold_run=None) -> float:
+    """Feed the same state (or a list) for `steps` steps, after the green book's travel with the right hand holding the run (`hold`, or the
+    list `hold_steps`); the bookend's mark is where it stood on the first step of a run that starts at the true start."""
     tr = t.Trial()
     tr.reset()
     tr.end0 = END0.copy()
     seq = states if isinstance(states, list) else [states] * steps
     if hold:
-        h = hold_state()
-        if hold_run is not None:
-            h = dict(h)
-            for i, (p_, R_) in enumerate(hold_run):
-                h[f"run{i}"] = S(p_, R_)
-        seq = [h] * (t.HOLD_NEED if hold_steps is None else hold_steps) + seq
+        seq = (travel() if hold_steps is None else hold_steps) + seq
     for st in seq:
         t.m.state = lambda env, name, st=st: st[name]
         t.m.fingertips = lambda env, st=st: st["tips"]
         t.m.hand_body = lambda env, st=st: st.get("body", FAR)
+        t.m.contact_forces = lambda env, parts, st=st: np.vstack([st["force"], np.zeros((len(parts) - 1, 2))])
         tr.step(None)
     return tr.score
 
@@ -142,7 +143,7 @@ def yawed_end(deg):
 
 def wedge_play():
     """One hand only: it never comes near the run while the other is at the green book; the end state is a full one."""
-    return play(state(), hold=False)
+    return play(state(), hold=False)  # no travel step is ever held
 
 
 def knocked_play():
@@ -180,12 +181,19 @@ CASES = [
     ("the green book yawed 10 degrees, otherwise flush", state(new=green(R=rz(10.0) @ t.rot_x(3.0))), 0.5),
     ("a palm 1 cm off the run's head, fingertips 6 cm away", state(body=body_at([t.X_S + 0.07, t.upright_faces()[2][0], TOP + t.Z_S + 0.25])), 0.0),
     ("a run book knocked flat for 30 steps, then stood up again (latched)", "knocked", 0.0),
-    ("the hold lasts 19 steps of the 20 needed: capped at 0.5", "hold19", 0.5),
-    ("the hand at the run for 20 steps but the run still leans 17 degrees: capped at 0.5", "holdlean", 0.5),
-    ("a hand passes the run for one step: capped at 0.5", "hold1", 0.5),
+    ("the fingers press the run through the whole travel: 1.0", "hold_all", 1.0),
+    ("the left hand holds the run, as well as the right: 1.0", "hold_left", 1.0),
+    ("no finger touches the run at any step of the travel: capped at 0.5", "no_touch", 0.5),
+    ("one step of the travel with no contact (the 20th of 40): capped at 0.5", "lapse1", 0.5),
+    ("the hold released when the book is 4 cm in (step 25 of 40, none after): capped at 0.5", "early", 0.5),
+    ("a touch of 0.05 N only, under the threshold: capped at 0.5", "light", 0.5),
+    ("a touch only after the book is seated: capped at 0.5", "after", 0.5),
+    ("hovering: a hand 1 cm off the run, fingers never on it: capped at 0.5", "hover", 0.5),
+    ("pressing the run through the travel but it leans 17 degrees: capped at 0.5", "holdlean", 0.5),
+    ("the first step of the travel unheld, held after: capped at 0.5", "late", 0.5),
     ("the green book yawed 5 degrees, otherwise flush", state(new=green(R=rz(5.0) @ t.rot_x(3.0))), 1.0),
     ("the green book yawed 7 degrees, otherwise flush", state(new=green(R=rz(7.0) @ t.rot_x(3.0))), 0.5),
-    ("one hand only, never at the run: capped at 0.5", "wedge", 0.5),
+    ("one hand only, never at the run (the book somehow in): capped at 0.5", "wedge", 0.5),
     ("a run book turning at 0.3 rad/s with the centres at rest", "slow", 0.0),
     ("the bookend tipped 12 degrees", state(end=(END0, t.rot_x(12.0))), 0.0),
     ("a run book fallen over (40 degrees)", state(run=run_upright(which=0, tilt_one=40.0)), 0.0),
@@ -214,8 +222,15 @@ def main() -> None:
     for name, st, want in CASES:
         if isinstance(st, str):
             got = {"knocked": knocked_play, "wedge": wedge_play, "slow": slow_tip_play,
-                   "hold19": lambda: play(state(), hold_steps=19), "hold1": lambda: play(state(), hold_steps=1),
-                   "holdlean": lambda: play(state(), hold_run=start_run)}[st]()
+                   "hold_all": lambda: play(state()), "hold_left": lambda: play(state(), hold_steps=travel(force=(1.3, 0.2))),
+                   "no_touch": lambda: play(state(), hold_steps=travel(force=(0.0, 0.0))),
+                   "lapse1": lambda: play(state(), hold_steps=travel(lapse=range(19, 20))),
+                   "early": lambda: play(state(), hold_steps=travel(stop=25)),
+                   "light": lambda: play(state(), hold_steps=travel(force=(0.0, 0.05))),
+                   "after": lambda: play(state(), hold_steps=travel(force=(0.0, 0.0)) + [state(force=HELD)] * 30),
+                   "hover": lambda: play(state(), hold_steps=travel(force=(0.0, 0.0), run=run_upright(lean=0.5))),
+                   "holdlean": lambda: play(state(), hold_steps=travel(run=start_run)),
+                   "late": lambda: play(state(), hold_steps=travel(lapse=range(0, 1)))}[st]()
         elif want is None:  # the hold: 39 steps at rest after a spell of motion
             got = play([dict(st[0], newbook=S(*green(), vel=0.05))] * 20 + st[20:])
             want = 0.0
