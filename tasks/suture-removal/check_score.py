@@ -98,6 +98,29 @@ for name, path_, want in cut_paths:
     bad += not ok
     print(f"{'ok ' if ok else 'BAD'} cut {got!s:5} (want {want!s:5})  {name}")
 
+# the cut's force gate: the leg on the notch's edge with a push of F_CUT (1.0 N) or more, held PRESS_HOLD steps (0.2 s)
+def pressed(seq):
+    """seq: (on the edge, push in N) per step; whether the leg is cut."""
+    n = 0
+    for at_edge, f in seq:
+        n, through = task.press_step(n, at_edge, f)
+        if through:
+            return True
+    return False
+presses = [
+    ("on the edge, 1.2 N for 0.2 s", [(True, 1.2)] * 4, True),
+    ("on the edge, 0.6 N for 2 s (a light touch)", [(True, 0.6)] * 40, False),
+    ("on the edge, 0.95 N for 2 s (just under the force)", [(True, 0.95)] * 40, False),
+    ("on the edge, 1.5 N for 0.15 s, then eased to 0.5 N", [(True, 1.5)] * 3 + [(True, 0.5)] * 20, False),
+    ("1.5 N for 2 s, but not on the edge (the blade's side or front)", [(False, 1.5)] * 40, False),
+    ("on the edge, 1.0 N for 0.2 s", [(True, 1.0)] * 4, True),
+]
+for name, seq, want in presses:
+    got = pressed(seq)
+    ok = got == want
+    bad += not ok
+    print(f"{'ok ' if ok else 'BAD'} press {got!s:5} (want {want!s:5})  {name}")
+
 # back in its tray: let go and at rest, inside the tray and off the gauze (the forceps' tray at (0.34, 0.16), 16 x 9 cm; the gauze at (0.24, 0.20))
 tray = (0.34, 0.16, 0.08, 0.045)
 gauze = (0.24, 0.20, 0.0375, 0.0375)
