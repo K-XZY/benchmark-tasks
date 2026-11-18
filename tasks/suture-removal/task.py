@@ -9,7 +9,7 @@ rigid strand with colliders (the knot, 3 x 2.2 x 2.5 mm, and the loop) that only
 the skin (sprung) and a circular track (a hinge, radius 26 mm) that carries it up and back toward the wound; the track is locked until the cut, and after
 it resists the pull with a set force (0.3 N, assumed). The cutter's hook has colliders, and each leg resists it on a spring along the cutting direction.
 A cut is a rule: the cutter's hook slid in under the lifted loop from beside it, the leg entering the notch through its mouth and pressed onto its sharp
-inner edge, read in the cutter's frame, with a push on the leg of 1.0 N held 0.2 s (assumed; 0.5 to 2 N). Drawn out the whole track, the strand gives way to a free
+inner edge, read in the cutter's frame, with a push on the leg of 1.0 N held 0.2 s (a simulation-only estimate, 0.5 to 2 N; the real trial is judged from video). Drawn out the whole track, the strand gives way to a free
 rigid strand in the jaws, which the forceps carry and let go: it lands where it falls. The forceps' arms are a sprung hinge that the gripper's squeeze
 closes; a pinch on them resists turning over a 4 mm patch.
 
