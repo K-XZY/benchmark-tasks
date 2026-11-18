@@ -1,6 +1,6 @@
 """Hang a server's tool-less sliding rail in a real 4-post rack: seat its back end's pegs in the marked U of the rear flange until its latch
-clicks, while the other hand supports the rail's front; then draw the front member out along its slide to the front flange, match the same U,
-and seat it until it clicks.
+clicks, while the other hand supports the rail's front; then slide the front end piece about 28 mm forward to the front flange, match the
+same U, and push it in until it clicks.
 
 The rack's near posts stand at x 0.28 with their flanges 0.74 m apart along y (rear at +0.37, front at -0.37): square EIA-310 holes, 9.5 mm,
 three to a U of 44.45 mm, the target U marked on both. The rail is a Dell B6 ReadyRails II sliding rail, the 1U PowerEdge R640's (Dell's
@@ -64,7 +64,8 @@ def u_holes(k: int):
 
 
 # -- the rail: a Dell B6 ReadyRails II sliding rail (1U, tool-less) ---------------------------------------------------------------------------
-RAIL_L, RAIL_MAX = 0.630, 0.883  # end piece face to end piece face, collapsed and drawn out: Dell's square-hole range between flanges (R640 Technical Guide, table 18)
+RAIL_MIN, RAIL_MAX = 0.630, 0.883  # Dell's square-hole range between flanges (R640 Technical Guide, table 18)
+RAIL_L = 0.712  # the rail's length at the start, end piece face to face: its slide is already set to this rack, 28 mm under the 0.74 m between the flanges, so the pegs can be carried in between them
 RAIL_W, RAIL_H = 0.018, 0.040  # simulation setting: the channel across (x) and its height (z), within one U (Dell gives no section)
 RAIL_KG, DRAW_KG = 1.00, 0.35  # simulation setting, 1.35 kg in all (Dell lists no mass): a steel rail of this length, heavy enough that it is carried level with two hands
 PEG, PEG_TIP, PEG_L, PEG_TIP_L = 7.5 * mm, 4.5 * mm, 5.0 * mm, 4.0 * mm  # simulation setting: square pegs tapered from 7.5 to 4.5 mm over 9 mm, a lead-in to EIA-310's 9.5 mm holes
@@ -147,7 +148,7 @@ def _rail() -> m.Part:
                   ("front_latch", m.box((0.010, 0.012, 0.010), (-0.012, -half + 0.016, 0.0)), "latch")] + dm
     draw_cols = [m.col_box("c_front_end", (0.030, 0.008, END_H), (0.0, -half + 0.004, 0.0)),
                  m.col_box("c_inner", (RAIL_W - 0.004, 0.072, RAIL_H - 0.008), (0.0, -half + 0.044, 0.0))] + dc
-    draw = m.slider("draw", "Y", RAIL_L - RAIL_MAX, 0.0, draw_parts, draw_cols, mass=DRAW_KG, spring=0.0, damping=5.0, friction=DRAW_FRICTION, effort=200.0,
+    draw = m.slider("draw", "Y", RAIL_L - RAIL_MAX, RAIL_L - RAIL_MIN, draw_parts, draw_cols, mass=DRAW_KG, spring=0.0, damping=5.0, friction=DRAW_FRICTION, effort=200.0,
                     inertia=(DRAW_KG * 0.3 ** 2 / 12, 1e-4, DRAW_KG * 0.3 ** 2 / 12))
     return m.mechanism("rail", (RAIL_START[0], RAIL_START[1], TOP + END_H / 2 + 0.0005), [draw], LOOKS, frame, cols, friction=(0.6, 0.5),
                        free_mass=RAIL_KG, frame_inertia=(RAIL_KG * RAIL_L ** 2 / 12, RAIL_KG * 0.02 ** 2 / 6, RAIL_KG * RAIL_L ** 2 / 12))
@@ -311,6 +312,8 @@ def demo_script(ctx):
             ax = rail().rotation()[:, 1]
             sep = float(np.linalg.norm(l.tcp()[:2] - r.tcp()[:2]))
             fix = np.array([float(ax[0]), 0.0, float(ax[2])]) * sep  # the back end high or off to one side: the front hand brings the rail square
+        if level:
+            fix = fix + np.array([0.0, -rail().joint("draw"), 0.0])  # the front hand keeps the slide at the length it was set to, as seen on the rail
         yield from ctx.together(l.move(l.at() + err, t=t, label=label), r.move(r.at() + err + fix, t=t, label=label))
 
     if mode == "onearm":  # the left hand alone, at the rail's middle; it cannot hold the rail from pitching in its fingers
@@ -342,7 +345,7 @@ def demo_script(ctx):
     if mode == "tilted":  # the front hand 25 mm low: the rail 3.4 degrees out of level
         yield from r.move(r.at() + [0.0, 0.0, -0.025], t=0.8, label="the front end low")
     # 2. In between the posts, level, at the marked U, the back pegs 6 mm short of the rear flange's holes.
-    y_c = Y_REAR - half - 0.015
+    y_c = Y_REAR - half - 0.012
     yield from both(np.array([HOLE_X, y_c - 0.010, z_mid + 0.02]) - rail().pos, 2.5, "the rail in between the posts")
     for _ in range(6):  # lined up to the holes, as seen, and levelled: the pegs fit 9.5 mm holes with 0.75 mm a side
         yield from both(np.array([HOLE_X, Y_REAR - 0.012, z_mid]) - back_face(), 0.5, "the back end at the marked U", level=True)
@@ -368,13 +371,13 @@ def demo_script(ctx):
         return
     yield from l.open(t=0.4, label="let go of the rail's middle")
     yield from l.move(l.at() + [-0.04, -0.04, 0.05], t=1.0, label="left hand clear")
-    # 4. The right hand draws the front member out to the front flange, at the same U, and pushes it home past the latch.
+    # 4. The right hand lines the front end piece up at the same U and pushes it into the front flange, home past the latch.
     for k in range(10):
         if HANG.latched["front"] is not None:
             break
         ff = front_face()
         goal = np.array([HOLE_X, Y_FRONT - 0.5 * mm if k >= 4 else max(ff[1] - 0.04, Y_FRONT + 0.012), z_front])
-        yield from r.move(r.at() + (goal - ff) + [0.0, -0.002 if k >= 4 else 0.0, 0.0], t=0.8 if k < 4 else 0.6, label="draw the front out, then home")
+        yield from r.move(r.at() + (goal - ff) + [0.0, -0.002 if k >= 4 else 0.0, 0.0], t=0.8 if k < 4 else 0.6, label="line the front up, then push it home")
     print(f"[rail] front: {HANG.last}", flush=True)
     yield from r.open(t=0.4, label="let go of the front")
     yield from r.move(r.at() + [-0.05, 0.0, 0.10], t=1.0, label="right hand clear")
