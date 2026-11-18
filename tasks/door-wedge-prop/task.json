@@ -1,0 +1,20 @@
+{
+  "title": "Prop a door open with a rubber wedge: push it under the door's bottom edge until its slope bites, then let go",
+  "category": "Societal relatability",
+  "keywords": [
+    "door stop",
+    "door wedge",
+    "hinged door",
+    "rubber wedge",
+    "two hands"
+  ],
+  "instruction": "Prop the door open with the rubber wedge: push it under the door's bottom edge so the door stays open when pushed, then let go with both hands.",
+  "context": "Most people have propped a door open with a rubber wedge door stop, to carry things through or let air in: one hand keeps the door from swinging away while the wedge goes under its bottom edge, thin end first, and is pushed in until it is tight. It holds only once its slope is pressed against the door's edge; the door's own weight does not help, as it hangs on a vertical hinge line. Laid beside the door, on its side, or pushed in short of the edge, it holds nothing and the door swings shut. Here the lower part of a real interior door hangs on two butt hinges and an Everbilt rubber wedge lies on the floor tile nearby. A firm pull on the door then shows whether the wedge holds.",
+  "setup": "Centimetres from the midpoint between the arm bases: x forward, y to the robot's left, heights above the bench top. (1) A vinyl floor tile 61 x 30.5 cm, 5 mm thick, fixed to the bench, centred at (53, -10), its long side along x (estimates). (2) The lower 250 mm of a standard 30 x 80 in hollow-core interior door: 762 mm wide, 35 mm thick, its top capped, swinging with the inertia of a full 12 kg leaf (2.3 kg m2 about the hinge, estimate), hung on two 3-1/2 in steel butt hinges on a vertical line at x = 106, y = 0, screwed to a 50 x 100 mm wooden post bolted to the bench. The leaf stands open in the plane y = 0, its free edge at x = 30, so that closing swings it toward -y. Its bottom edge is 13 mm above the tile (18 mm above the bench). Hinge friction 0.2 N m. (3) An Everbilt 4-3/4 in heavy-duty rubber door stop (listing 4.69 x 2.19 x 1.4 in: 119 x 56 x 36 mm; 5 mm tip, 0.12 kg), lying flat on the tile, slope up, thin end toward +y, centred at (40, -20). Friction: wedge on tile 1.0, wedge on the door's painted edge 0.4; rubber contact stiffness 100 N per mm (estimates). The wedge goes in near the free edge, from the -y side. Both arms start at their ready pose, grippers open.",
+  "scoring": "Judged once both grippers are 3 cm from the door and the wedge and all has been still for 1 s. The door's free edge, 10 cm above the floor, is then pulled toward closing at 20 N for 2 s (real trial: a luggage scale hooked in a screw eye in the edge, pulled square to the leaf, and a ruler). Under the edge: the wedge's slope touching the door's bottom edge, 20 mm or more of the wedge past the door's closing-side face. 1.0: under the edge, the door left within 8 mm of where it stood, and it moves under 5 mm in the pull. 0.5: the wedge stops the door within 30 mm (slope on the edge, door still), or the door was shoved over 8 mm, or under 20 mm of the wedge is under. 0: the door moves over 30 mm, the wedge is not on the edge, or the run ends before the judging.",
+  "run_limit": "1800 steps (90 s at 20 Hz)",
+  "reset_notes": "Nothing is random: the door at joint zero, the wedge at its mark.",
+  "fidelity": "Rigid bodies at 240 Hz on GPU. The wedge is a modelled 119 x 56 x 36 mm prism (no maker drawing found), rubber as a 100 N/mm compliant contact. The door is the lower 250 mm of a real 762 mm leaf on a vertical hinge, given a full 12 kg leaf's swing inertia (2.3 kg m2, estimate; real trial: about 4 kg of flat bar 0.70 m out on the stub); hinge friction 0.2 N m. Frictions, stiffness, tip are estimates. The 20 N pull is a force. Clearance reads fingertips. The demo reads the wedge's pose.",
+  "scores": "Dream-1 run: 0.0 (one valid run, 1,800 steps); demo: 1.0 (both hands, 419 steps); one hand alone: 0.0. The door has the swing inertia of a full leaf (2.3 kg m2).",
+  "media": "M-HDHKNM"
+}
