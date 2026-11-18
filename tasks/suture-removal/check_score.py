@@ -54,11 +54,14 @@ for name, pts, want in routes:
 import math
 legy = -R
 def leg_points():
-    return np.array([[0.0, legy, z] for z in np.linspace(SKIN, SKIN + LIFT + 0.0008, 6)])
-def cuts(hook_path, yaw=0.0):
-    """hook_path: the notch floor's middle (station frame, the pad's middle at x 0) per step; the cutter upright, turned `yaw` degrees about z."""
+    return np.array([[0.0, legy, z] for z in np.linspace(SKIN, SKIN + LIFT + 0.0008, 24)])
+def cuts(hook_path, yaw=0.0, lean=0.0):
+    """hook_path: the notch floor's middle (station frame, the pad's middle at x 0) per step; the cutter turned `yaw` degrees about z, then leaning
+    `lean` degrees back toward -y (about x), as the demo holds it."""
     c, s_ = math.cos(math.radians(yaw)), math.sin(math.radians(yaw))
     Rz = np.array([[c, -s_, 0.0], [s_, c, 0.0], [0.0, 0.0, 1.0]])
+    cl, sl = math.cos(math.radians(lean)), math.sin(math.radians(lean))
+    Rz = np.array([[1.0, 0.0, 0.0], [0.0, cl, -sl], [0.0, sl, cl]]) @ Rz
     floor_local = np.array([(task.NOTCH_X0 + task.NOTCH_X1) / 2, 0.0, -task.TIP_L + task.FOOT_H])
     st, out = (False, False), None
     for hk in hook_path:
@@ -83,9 +86,14 @@ cut_paths = [
     ("the cutter turned 90 degrees, the same path", line(0.010, 0.0) + line(0.0, -0.0015, n=6)[1:], False),
     ("slid in from the spine's side (from -x)", line(-0.010, 0.0) + line(0.0, 0.0015, n=6)[1:], False),
     ("the notch's floor 4 mm over the skin (the leg below the notch)", line(0.010, 0.0, z=SKIN + 0.004) + line(0.0, -0.0015, z=SKIN + 0.004, n=6)[1:], False),
+    ("leaning 50: the demo's path, the hook 0.6 mm toward the knot, slid in and pressed on", line(0.010, 0.0, y=legy + 0.0006) + line(0.0, -0.0025, y=legy + 0.0006, n=8)[1:], True),
+    ("leaning 50: the hook on the leg's line, slid in and pressed on", line(0.010, 0.0) + line(0.0, -0.0025, n=8)[1:], True),
+    ("leaning 50: slid in, stopped with the leg in the notch, never pressed onto its edge", line(0.010, 0.0, y=legy + 0.0006), False),
+    ("leaning 50: the hook 1 mm toward -y (the blade's plane meets the leg under the notch)", line(0.010, 0.0, y=legy - 0.001) + line(0.0, -0.0025, y=legy - 0.001, n=8)[1:], False),
+    ("leaning 50: the notch's floor 4 mm over the skin (the leg below the notch)", line(0.010, 0.0, z=SKIN + 0.004) + line(0.0, -0.0025, z=SKIN + 0.004, n=8)[1:], False),
 ]
 for name, path_, want in cut_paths:
-    got = cuts(path_, yaw=90.0 if "turned" in name else 0.0)
+    got = cuts(path_, yaw=90.0 if "turned" in name else 0.0, lean=50.0 if name.startswith("leaning") else 0.0)
     ok = got == want
     bad += not ok
     print(f"{'ok ' if ok else 'BAD'} cut {got!s:5} (want {want!s:5})  {name}")
@@ -112,20 +120,20 @@ for name, pts, tips, want in rests:
     bad += not ok
     print(f"{'ok ' if ok else 'BAD'} in tray {got!s:5} (want {want!s:5})  {name}")
 
-# letting go of the stitch: over the gauze once drawn out it lands there; after the cut, anywhere else it is dropped for good (the scorer then refuses
-# any new grasp, so it cannot be picked up again at the knot's old place and carried to the gauze)
-releases = [
-    ("drawn out, opened over the gauze", (True, 1.0, (0.24, 0.20, TOP + 0.02)), (True, False)),
-    ("drawn out, opened over the pad (then re-closed at the knot's old place: refused)", (True, 1.0, (0.32, 0.0, TOP + 0.04)), (False, True)),
-    ("cut, opened over the pad half way through the draw", (True, 0.5, (0.32, -0.005, TOP + 0.04)), (False, True)),
-    ("cut, not drawn out, opened over the gauze", (True, 0.3, (0.24, 0.20, TOP + 0.02)), (False, True)),
-    ("not yet cut, opened at the knot (it is still in the skin, and may be taken again)", (False, 0.0, (0.32, 0.0045, TOP + 0.031)), (False, False)),
+# the free strand on the gauze: both its ends inside the gauze's outline, near the table, at rest
+G, T = task.GAUZE, task.TOP
+lands = [
+    ("lying on the gauze, at rest", ((G[0], G[1], T + 0.003), (G[0] + 0.02, G[1], T + 0.003), 0.0), True),
+    ("lying on the gauze, still sliding", ((G[0], G[1], T + 0.003), (G[0] + 0.02, G[1], T + 0.003), 0.1), False),
+    ("fallen on the pad's block", ((0.32, 0.0, T + 0.03), (0.34, 0.0, T + 0.03), 0.0), False),
+    ("half over the gauze's edge", ((G[0] + 0.03, G[1], T + 0.003), (G[0] + 0.05, G[1], T + 0.003), 0.0), False),
+    ("still in the jaws, 3 cm up over the gauze", ((G[0], G[1], T + 0.03), (G[0] + 0.02, G[1], T + 0.03), 0.0), False),
 ]
-for name, args, want in releases:
-    got = task.let_go(*args)
+for name, args, want in lands:
+    got = task.thread_on_gauze(*args)
     ok = got == want
     bad += not ok
-    print(f"{'ok ' if ok else 'BAD'} let go {got} (want {want})  {name}")
+    print(f"{'ok ' if ok else 'BAD'} strand on gauze {got!s:5} (want {want!s:5})  {name}")
 
 base = {"broke": False, "dug": False, "lifted_max_mm": 0.0, "cut": False, "cut_side": None, "cut_h_mm": None, "drawn": 0.0, "gap_max_mm": 0.0,
         "on_gauze": False, "in_rests": [False, False], "clear": False}

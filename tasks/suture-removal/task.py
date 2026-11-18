@@ -5,9 +5,12 @@ side. Dissecting forceps stand tips-down in a foam rest at the left; a single-us
 in a foam rest at the right; a gauze square lies on the table.
 
 Sim (stated, all in code): the pad's knot-side half rides on a stiff spring across the incision, so a pull away from the wound opens it. The stitch is a
-rigid strand (drawn 0.6 mm thick, no collider) on a lift joint normal to the skin and a hinge about the centre of its buried arc; the forceps' tips, closed
-on the knot, set the lift (while uncut) and the draw (once cut), gated on geometry. A cut is the leg entering the cutter's notch through its mouth under
-the lifted loop and pressed onto its sharp inner edge, read in the cutter's frame; its height above the skin is recorded. The forceps' arms are a sprung hinge that the gripper's squeeze closes.
+rigid strand with colliders (the knot, 3 x 2.2 x 2.5 mm, and the loop) that only the forceps' jaws can move, by friction: it rides a lift joint normal to
+the skin (sprung) and a circular track (a hinge, radius 26 mm) that carries it up and back toward the wound; the track is locked until the cut, and after
+it resists the pull with a set force (0.3 N, assumed). A cut is a rule: the cutter's hook slid in under the lifted loop from beside it, the leg entering
+the notch through its mouth and pressed onto its sharp inner edge, read in the cutter's frame. Drawn out the whole track, the strand gives way to a free
+rigid strand in the jaws, which the forceps carry and let go: it lands where it falls. The forceps' arms are a sprung hinge that the gripper's squeeze
+closes; a pinch on them resists turning over a 4 mm patch.
 
     python demokit.py task.py OUT --mode scene --stills 1
     python demokit.py task.py OUT --mode full
@@ -43,6 +46,14 @@ BLOCK = (0.14, 0.10)  # the block under the pad, x by y
 SKIN = TOP + BLOCK_H + SKIN_T  # the skin's surface
 R_ARC = 0.004  # the stitch's bite: it leaves the skin 4 mm either side of the incision
 KNOT_Y = 0.0045
+KZ = 0.0015  # the knot's centre over the skin
+RC = 0.026  # the radius of the track the strand is drawn out along: it rises 13 mm and comes 3.5 mm toward the wound over 30 degrees
+DRAW_FULL, DRAW_LIM = 30.0, 33.0  # degrees: drawn out, and the track's end
+F_R = 0.3  # N: the pull the strand's track resists once cut (ASSUMED: a 3-0 nylon in a closed pad track; range 0.1 to 1 N)
+THREAD_PARK = np.array([0.60, 0.0])  # where the free strand waits, hidden, until it is drawn out
+THREAD_LEN = 0.020
+SWAP_UP = 0.0035  # the free strand's knot over the drawn knot's place, between the same jaws
+SWAP_HOLD = 6  # control steps (0.3 s) that the drawn strand keeps its colliders after the swap
 FORCEPS_REST = np.array([0.34, 0.16])
 CUTTER_REST = np.array([0.30, -0.15])
 GAUZE = np.array([0.24, 0.20])
@@ -52,6 +63,7 @@ DIG = 0.002  # the blunt foot pressed this far into the soft silicone goes throu
 BAND = 0.0009  # the leg within this of the blade's plane: the strand touching the 1.2 mm steel
 NOTCH_X0, NOTCH_X1, SPINE_X1 = -0.002, 0.001, 0.003  # across the cutter (its x): the notch's open mouth, its sharp inner edge, the spine's back
 TRAY = (0.16, 0.09)  # the steel tray under each foam rest
+JAW_Y, JAW = 0.0054, 0.067  # the forceps' arms 3.4 mm off the middle (the tips 9 mm apart open), and the arm's turn that closes them
 FORCEPS_PRE = 0.08  # rad: the forceps' arms spring open against their stop with this much preload
 
 LOOKS = {"skin": m.Look(color=m.rgb(0.86, 0.66, 0.56), roughness=0.8), "block": m.Look(color=m.rgb(0.25, 0.25, 0.27), roughness=0.7),
@@ -61,7 +73,9 @@ LOOKS = {"skin": m.Look(color=m.rgb(0.86, 0.66, 0.56), roughness=0.8), "block": 
 
 
 def _pad() -> m.Part:
-    """The block and the pad's fixed half (-y), its knot-side half (+y) on a stiff slide across the incision, and the stitch on that half."""
+    """The block and the pad's fixed half (-y), its knot-side half (+y) on a stiff slide across the incision, and the stitch on that half: a lift slide (the
+    knot under the forceps' pull, sprung) carrying the strand on a circular track (a hinge), locked until the cut. The strand's colliders (knot, loop)
+    meet only what is outside the pad: the forceps' jaws."""
     z0 = BLOCK_H + SKIN_T / 2
     frame = [("block", m.box((0.14, 0.10, BLOCK_H), (0.0, 0.0, BLOCK_H / 2)), "block"),
              ("skin_a", m.box((0.12, 0.04, SKIN_T), (0.0, -0.0201, z0)), "skin"),
@@ -70,32 +84,43 @@ def _pad() -> m.Part:
     half = m.slider("half", "Y", 0.0, 0.004, [("skin_b", m.box((0.12, 0.04, SKIN_T), (0.0, 0.0201, z0)), "skin")],
                     [m.col_box("c_skin_b", (0.12, 0.04, SKIN_T), (0.0, 0.0201, z0))], mass=0.05, spring=3000.0, damping=20.0, friction=0.0, effort=200.0)
     zs = BLOCK_H + SKIN_T
-    lift = m.slider("lift", "Z", 0.0, 0.006, [("lift_mark", m.box((0.0005, 0.0005, 0.0005), (0.0, KNOT_Y, zs - 0.002)), "skin")], [], parent="half",
+    lift = m.slider("lift", "Z", 0.0, 0.008, [("lift_mark", m.box((0.0005, 0.0005, 0.0005), (0.0, KNOT_Y, zs - 0.002)), "skin")], [], parent="half",
                     mass=0.002, spring=200.0, damping=2.0, friction=0.0, effort=50.0)
     # the stitch: knot, the loop over the incision, the two legs into the skin, and the buried arc (a semicircle under the incision)
-    parts = [("knot", m.box((0.0025, 0.0025, 0.002), (0.0, KNOT_Y, zs + 0.0012)), "nylon"),
+    parts = [("knot", m.box((0.0030, 0.0022, 0.0025), (0.0, KNOT_Y, zs + KZ)), "nylon"),
              ("loop", m.box((0.0006, 2 * R_ARC + 0.001, 0.0006), (0.0, 0.0, zs + 0.0008)), "nylon"),
              ("near_leg", m.box((0.0006, 0.0006, 0.0012), (0.0, R_ARC, zs + 0.0002)), "nylon"),
              ("far_leg", m.box((0.0006, 0.0006, 0.0012), (0.0, -R_ARC, zs + 0.0002)), "nylon")]
     for k, a in enumerate(np.linspace(math.radians(195), math.radians(345), 9)):
         parts.append((f"arc_{k}", m.box((0.0006, 0.0018, 0.0006), (0.0, R_ARC * math.cos(a), zs + R_ARC * math.sin(a))), "nylon"))
-    draw = m.hinge("draw", "X", (0.0, 0.0, zs), 0.0, 200.0, parts, [], parent="lift", mass=0.002, spring=2.0, damping=0.05, friction=0.0, effort=20.0)
+    scols = [m.col_box("c_knot", (0.0030, 0.0022, 0.0025), (0.0, KNOT_Y, zs + KZ)),
+             m.col_box("c_loop", (0.0008, 2 * R_ARC - 0.0016, 0.0008), (0.0, 0.0008, zs + 0.0008))]  # begins 1.5 mm past the far leg: the cutter's blade stands beside the leg, not on the loop
+    draw = m.hinge("draw", "X", (0.0, KNOT_Y - RC, zs + KZ), 0.0, DRAW_LIM, parts, scols, parent="lift", mass=0.002, spring=0.0, damping=0.05, friction=0.0, effort=20.0)
     return m.mechanism("pad", (PAD_C[0], PAD_C[1], TOP), [half, lift, draw], LOOKS, frame_parts=frame, frame_colliders=cols, friction=(1.0, 0.9))
 
 
+def _thread() -> m.Part:
+    """The strand once drawn out: a free rigid body, a knot and 20 mm of strand along -y from it (as the loop runs from the knot), waiting hidden at the side
+    until it comes out of the pad."""
+    parts = [("t_knot", m.box((0.0030, 0.0022, 0.0025)), "nylon"), ("t_strand", m.box((0.0007, THREAD_LEN, 0.0007), (0.0, -(THREAD_LEN / 2 + 0.0011), 0.0)), "nylon")]
+    cols = [m.col_box("c_t_knot", (0.0030, 0.0022, 0.0025)), m.col_box("c_t_strand", (0.0007, THREAD_LEN, 0.0007), (0.0, -(THREAD_LEN / 2 + 0.0011), 0.0))]
+    return m.free("thread", (THREAD_PARK[0], THREAD_PARK[1], TOP + 0.002), parts, cols, LOOKS, mass=0.001, friction=(0.9, 0.8), torsional_patch=None, solver_iters=64)
+
+
 def _forceps() -> m.Part:
-    """Dissecting forceps, 12 cm, standing tips-down in its rest; origin where the hand holds them, 7 cm above the tips. Arm A is the frame; arm B turns
-    about the joined back end and springs open (tips 4 mm apart) against a stop; a squeeze closes it."""
+    """Dissecting forceps, 12 cm, standing tips-down in its rest, the arms side by side along x; origin where the hand holds them, 7 cm above the tips.
+    Arm A is the frame; arm B turns about the joined back end and springs open (tips 9 mm apart) against a stop; a squeeze closes it. A pinch on the
+    arms resists turning about the pinch axis over a 4 mm patch (the finger pad on the 6 mm arm)."""
     back = 0.05
-    frame = [("arm_a", m.box((0.006, 0.0018, back + TIP_L), (0.0, 0.0029, (back - TIP_L) / 2)), "steel"),
+    frame = [("arm_a", m.box((0.006, 0.0018, back + TIP_L), (0.0, JAW_Y, (back - TIP_L) / 2)), "steel"),
              ("butt", m.box((0.006, 0.008, 0.008), (0.0, 0.0, back - 0.004)), "steel")]
-    cols = [m.col_box("c_arm_a", (0.006, 0.0018, back + TIP_L), (0.0, 0.0029, (back - TIP_L) / 2))]
-    arm_b = m.hinge("arm_b", "X", (0.0, 0.0, back), 0.0, math.degrees(0.034), [("arm_b", m.box((0.006, 0.0018, back + TIP_L), (0.0, -0.0029, (back - TIP_L) / 2)), "steel")],
-                    [m.col_box("c_arm_b", (0.006, 0.0018, back + TIP_L), (0.0, -0.0029, (back - TIP_L) / 2))], mass=0.008, spring=1.0, damping=0.02,
+    cols = [m.col_box("c_arm_a", (0.006, 0.0018, back + TIP_L), (0.0, JAW_Y, (back - TIP_L) / 2))]
+    arm_b = m.hinge("arm_b", "X", (0.0, 0.0, back), 0.0, math.degrees(JAW), [("arm_b", m.box((0.006, 0.0018, back + TIP_L), (0.0, -JAW_Y, (back - TIP_L) / 2)), "steel")],
+                    [m.col_box("c_arm_b", (0.006, 0.0018, back + TIP_L), (0.0, -JAW_Y, (back - TIP_L) / 2))], mass=0.008, spring=1.0, damping=0.02,
                     friction=0.0, effort=10.0)
     z = TOP + 0.004 + TIP_L + 0.0005  # tips on the rest's floor
     return m.mechanism("forceps", (FORCEPS_REST[0], FORCEPS_REST[1], z), [arm_b], LOOKS, frame_parts=frame, frame_colliders=cols, free_mass=0.012,
-                       friction=(0.9, 0.8), frame_inertia=(1.5e-5, 1.5e-5, 1e-6))
+                       friction=(0.9, 0.8), frame_inertia=(1.5e-5, 1.5e-5, 1e-6), yaw_deg=90.0, torsional_patch=0.004)
 
 
 def _cutter() -> m.Part:
@@ -105,14 +130,14 @@ def _cutter() -> m.Part:
     parts = [("blade", m.box((0.006, 0.0012, 0.02 - zb), (0.0, 0.0, (0.02 + zb) / 2)), "steel"),
              ("spine", m.box((SPINE_X1 - NOTCH_X1, 0.0012, NOTCH_H + FOOT_H), ((SPINE_X1 + NOTCH_X1) / 2, 0.0, -TIP_L + (NOTCH_H + FOOT_H) / 2)), "steel"),
              ("foot", m.box((SPINE_X1 - NOTCH_X0, 0.0012, FOOT_H), ((SPINE_X1 + NOTCH_X0) / 2, 0.0, -TIP_L + FOOT_H / 2)), "steel")]
-    cols = [m.col_box("c_blade", (0.006, 0.002, 0.02 - (-TIP_L + 0.006)), (0.0, 0.0, (0.02 + (-TIP_L + 0.006)) / 2))]  # ends 6 mm above the tip
+    cols = [m.col_box("c_blade", (0.006, 0.002, 0.02 - (-TIP_L + 0.006)), (0.0, 0.0, (0.02 + (-TIP_L + 0.006)) / 2))]  # ends 6 mm above the tip: the hook itself has none
     return m.free("cutter", (CUTTER_REST[0], CUTTER_REST[1], TOP + 0.004 + TIP_L + 0.0005), parts, cols, LOOKS, mass=0.006)
 
 
 def _rests() -> m.Part:
     shapes = []
-    for nm, (x, y), half_w in (("rest_f", FORCEPS_REST, 0.0085), ("rest_c", CUTTER_REST, 0.0055)):
-        for k, dy in enumerate((-half_w, half_w)):  # two foam cheeks either side of the slot the instrument stands in (10 mm for the forceps, 4 mm for the cutter)
+    for nm, (x, y), half_w in (("rest_f", FORCEPS_REST, 0.0095), ("rest_c", CUTTER_REST, 0.0055)):
+        for k, dy in enumerate((-half_w, half_w)):  # two foam cheeks either side of the slot the instrument stands in (12 mm for the forceps, 4 mm for the cutter)
             shapes.append((f"{nm}_{k}", (0.04, 0.007, 0.03), (x, y + dy, TOP + 0.015), "foam"))
         shapes.append((f"{nm}_floor", (0.04, 0.02, 0.004), (x, y, TOP + 0.002), "foam"))
     for nm, (x, y) in (("tray_f", FORCEPS_REST), ("tray_c", CUTTER_REST)):
@@ -122,19 +147,19 @@ def _rests() -> m.Part:
     shapes.append(("gauze", (0.075, 0.075, 0.002), (GAUZE[0], GAUZE[1], TOP + 0.001), "gauze"))
     parts = [(nm, m.box(s, c), look) for nm, s, c, look in shapes]
     cols = [m.col_box(f"c_{nm}", s, c) for nm, s, c, look in shapes]
-    parts.append(("suture_out", m.box((0.0006, 0.022, 0.0006), (GAUZE[0], GAUZE[1], TOP + 0.0025)), "nylon"))
-    parts.append(("knot_out", m.box((0.0025, 0.0025, 0.002), (GAUZE[0], GAUZE[1] + 0.011, TOP + 0.003)), "nylon"))
     return m.fixed("rests", (0.0, 0.0, 0.0), parts, cols, LOOKS, friction=(1.0, 0.9))
 
 
-OBJECTS = [_pad(), _forceps(), _cutter(), _rests()]
+OBJECTS = [_pad(), _forceps(), _cutter(), _thread(), _rests()]
 
 
 # -- the gates and the scorer ---------------------------------------------------------------------------------------------------------------------
 
 def forceps_tips(env):
+    """The point midway between the jaws' inner faces at the tips (arm B's tip has moved 12 cm x its turn toward arm A), the forceps' state and arm B's turn."""
     f = m.state(env, "forceps")
-    return f.to_world(np.array([[0.0, 0.0, -TIP_L]]))[0], f, float(f.joint("arm_b"))
+    fb = float(f.joint("arm_b"))
+    return f.to_world(np.array([[0.0, 0.06 * math.sin(fb), -TIP_L]]))[0], f, fb
 
 
 def hook_point(env):
@@ -194,12 +219,11 @@ def notch_step(st, pts_local, ready):
     return (bool(open_side.any()), entered), cut
 
 
-def let_go(cut, drawn, tip):
-    """The forceps opened. Over the gauze (tips within 3.5 cm of its middle, under 5 cm up) with the stitch drawn out, the stitch lands on it. After the
-    cut, opened anywhere else, the stitch drops where the tips open: it can no longer be picked up at the knot's old place (it is not there) or carried
-    to the gauze. Before the cut the knot is still in the skin, and may be taken again. Returns (on the gauze, dropped)."""
-    on = bool(drawn >= 0.95 and abs(tip[0] - GAUZE[0]) < 0.035 and abs(tip[1] - GAUZE[1]) < 0.035 and tip[2] < TOP + 0.05)
-    return on, bool(cut and not on)
+def thread_on_gauze(knot, tail, speed):
+    """The free strand lying on the gauze: its knot end and its far end both inside the gauze's outline (3.5 cm half side), within 6 mm of the table, at rest."""
+    pts = np.array([knot, tail])
+    inside = bool(np.all(np.abs(pts[:, 0] - GAUZE[0]) < 0.035) and np.all(np.abs(pts[:, 1] - GAUZE[1]) < 0.035) and np.all(pts[:, 2] < TOP + 0.006))
+    return bool(inside and speed < 0.02)
 
 
 def at_rest(points, tips, floor_z, footprint, gauze):
@@ -213,71 +237,133 @@ def at_rest(points, tips, floor_z, footprint, gauze):
     return bool(let_go and float(points[:, 2].min()) < floor_z + 0.015 and inside(footprint) and not inside(gauze))
 
 
+def _drive(env, link, stiff, effort, target=None):
+    """A joint of the pad's drive gains and target, as `mechkit.lock` writes them (reset gives them back)."""
+    asset, j = m._joint(env, "pad", link)
+    m._TOUCHED.add(("pad", link))
+    asset.write_joint_effort_limit_to_sim(m._tensor(asset, effort), joint_ids=[j])
+    asset.write_joint_stiffness_to_sim(m._tensor(asset, stiff), joint_ids=[j])
+    if target is not None:
+        asset.set_joint_position_target(m._tensor(asset, target), joint_ids=[j])
+
+
+def _collide(path, on):
+    import isaaclab.sim as sim_utils
+    from pxr import UsdPhysics
+
+    prim = sim_utils.get_current_stage().GetPrimAtPath(path)
+    UsdPhysics.CollisionAPI(prim).GetCollisionEnabledAttr().Set(bool(on))
+
+
+def draw_pose(env):
+    """The strand's body (the one on the track): its origin and rotation, in the station frame."""
+    base = env.unwrapped
+    a = base.scene["pad"]
+    i = a.find_bodies("draw")[0][0]
+    pose = m._np(a.data.body_link_pose_w)[0, i]
+    return pose[:3] - m._np(base.scene.env_origins[0]), m.quat_matrix(pose[3:7])
+
+
+KNOT_LOCAL = np.array([0.0, KNOT_Y, BLOCK_H + SKIN_T + KZ])  # in the pad's frame, the pad's origin on the table
+
+
 class Stitch:
     def __init__(self):
         self.reset()
 
     def reset(self, env=None):
-        self.steps, self.held, self.lifted_max, self.broke, self.cut, self.cut_h, self.cut_side = 0, False, 0.0, False, False, None, None
+        self.steps, self.grasped, self.lifted_max, self.broke, self.cut, self.cut_h, self.cut_side = 0, False, 0.0, False, False, None, None
         self.notch, self.gap_max, self.drawn, self.on_gauze, self.dug, self.hold, self.full, self.last = None, 0.0, 0.0, False, False, 0, False, {}
-        self.shown, self.hook_st, self.open_near, self.stitch_dropped = None, (False, False, None, False), -1000, False
+        self.hook_st, self.swapped, self.armed = (False, False, None, False), False, False
         self.notch = {"far": (False, False), "near": (False, False)}
         self.floor_min = {"far": 1.0, "near": 1.0}
+        self.pull_max, self.knot0, self.swap_step, self.drawn_off = 0.0, None, 0, False
+        if env is not None:  # at import the simulator is not up: touching the stage would load its modules too early
+            for nm in ("t_knot", "t_strand"):
+                m.set_visible(f"{m.ENV_PATH}/thread/visual/{nm}", False)
+
+    def _swap(self, env):
+        """The strand is out of the pad: its body on the track gives way to the free strand, put where it is, with the jaws still on the knot."""
+        base = env.unwrapped
+        t, R = draw_pose(env)
+        knot = t + R @ KNOT_LOCAL
+        a = base.scene["thread"]
+        pose = a.data.root_link_pose_w
+        pose = getattr(pose, "torch", pose).clone()
+        # the free strand's knot goes 3.5 mm above the drawn knot, still between the jaws' faces (they stand 12 cm tall): put in the drawn knot's own place,
+        # the two knots overlap for a step before the drawn one's collider goes, and the light strand is thrown out of the jaws
+        pose[0, :3] = pose.new_tensor((knot + np.array([0.0, 0.0, SWAP_UP]) + m._np(base.scene.env_origins[0])).tolist())
+        pad = base.scene["pad"]
+        q = pad.data.body_link_pose_w[0, pad.find_bodies("draw")[0][0], 3:7]
+        pose[0, 3:7] = getattr(q, "torch", q).clone()  # turned as the strand on the track is: the strand runs from the knot along the loop's line
+        a.write_root_pose_to_sim(pose)
+        import torch
+        a.write_root_velocity_to_sim(torch.zeros((1, 6), device=pose.device))
+        for nm in ("knot", "loop", "near_leg", "far_leg") + tuple(f"arc_{k}" for k in range(9)):
+            try:
+                m.set_visible(f"{m.ENV_PATH}/pad/draw/visual/{nm}", False)
+            except Exception:
+                pass
+        for nm in ("t_knot", "t_strand"):
+            m.set_visible(f"{m.ENV_PATH}/thread/visual/{nm}", True)
+        self.swapped, self.swap_step = True, self.steps
+
+    def _drop_drawn(self):
+        """A few steps after the swap, the drawn strand's colliders go: the jaws, held open by it, then close the last fraction of a millimetre onto the
+        free strand's knot. Taken away at the swap itself, the jaws slam shut through the light knot."""
+        for nm in ("c_knot", "c_loop"):
+            _collide(f"{m.ENV_PATH}/pad/draw/{nm}", False)
+        self.drawn_off = True
 
     def step(self, env):
         self.steps += 1
         m.set_target(env, "forceps", "arm_b", -FORCEPS_PRE)  # the arms' spring: rest beyond the open stop, a preload
         pad = m.state(env, "pad")
         lift, draw, gap = float(pad.joint("lift")), float(pad.joint("draw")), float(pad.joint("half"))
-        knot0 = np.array([PAD_C[0], PAD_C[1] + KNOT_Y + gap, SKIN + 0.0012])
-        knot = knot0 + np.array([0.0, 0.0, lift])
+        if not self.armed:
+            m.lock(env, "pad", "draw")  # the strand cannot be drawn through the skin until its leg is cut
+            self.armed = True
+        if self.swapped and not self.drawn_off and self.steps - self.swap_step >= SWAP_HOLD:
+            self._drop_drawn()
+        t, R = draw_pose(env)
+        knot = t + R @ KNOT_LOCAL
+        if self.swapped:
+            knot = m.state(env, "thread").pos
+        if self.knot0 is None:
+            self.knot0 = knot.copy()
         tip, f, fb = forceps_tips(env)
-        closed = fb > 0.8 * 0.034
-        if not closed and np.linalg.norm(tip - knot) < 0.005:
-            self.open_near = self.steps  # open, the tips at the knot
-        if closed and not self.held and np.linalg.norm(tip - knot) < 0.003 and self.steps - self.open_near <= 10 and not self.on_gauze and not self.stitch_dropped:  # closed on the knot within 0.5 s of being open there, not touched to it shut
-            self.held = True
-        if self.held and not closed:
-            self.held = False
-            on, dropped = let_go(self.cut, self.drawn, tip)
-            self.on_gauze = self.on_gauze or on
-            self.stitch_dropped = self.stitch_dropped or dropped
-        # the knot follows the closed tips: lift while uncut (a pull away from the wound opens it), the draw once cut
-        rel = tip - knot0
-        if self.held and not self.cut:
-            up = float(np.clip(rel[2], 0.0, 0.006))
-            if rel[2] > 0.005:
+        closed = fb > 0.8 * JAW
+        near_knot = bool(np.linalg.norm(tip - knot) < 0.003)
+        # caught: the jaws shut on something the width of the knot (they stop short of fully closed), tips at the knot
+        if near_knot and 0.02 < fb < 0.054 and not self.swapped:
+            self.grasped = True
+        if not self.cut:
+            if lift > 0.005:
                 self.broke = True  # pulled up past what the stitch takes before it is cut: torn through the skin
-            m.set_target(env, "pad", "lift", up)
-            m.set_target(env, "pad", "half", float(np.clip(rel[1] - 0.0005, 0.0, 0.004)))
-        elif self.held and self.cut and self.drawn < 0.95:  # once drawn out, the stitch is free of the skin (carried to the gauze, it would open the wound)
-            away = float(np.clip(rel[1] - 0.0005, 0.0, 0.004))  # pulled away from the wound, the gap opens
-            m.set_target(env, "pad", "half", away)
-            progress = float(np.clip(np.linalg.norm(rel - np.array([0.0, 0.0, lift])) / 0.012, 0.0, 1.0)) if rel[1] <= 0.001 else self.drawn
-            if rel[1] > -0.003:
-                progress = min(progress, 0.9)  # drawn out only once the tips have gone 3 mm toward the wound
-            self.drawn = max(self.drawn, progress)
-            m.set_target(env, "pad", "draw", math.radians(180.0) * self.drawn)
-        else:
-            m.set_target(env, "pad", "lift", 0.0 if not self.cut else lift)
-            m.set_target(env, "pad", "half", 0.0)
-            m.set_target(env, "pad", "draw", math.radians(180.0) * self.drawn)
-        self.lifted_max = max(self.lifted_max, lift) if not self.cut else self.lifted_max
+            self.lifted_max = max(self.lifted_max, lift)
         self.gap_max = max(self.gap_max, gap)
-        # the cut: the hook under the stitch, the leg into its notch through the mouth and onto its inner edge (notch_step)
+        # after the cut the track gives, against a brake (the pull resistance F_R); the lift joint goes slack
+        if self.cut and not self.swapped:
+            _drive(env, "draw", 100.0, F_R * RC, target=draw)
+            _drive(env, "lift", 0.0, 50.0)
+            self.drawn = float(np.clip(math.degrees(draw) / DRAW_FULL, 0.0, 1.0))
+            self.pull_max = max(self.pull_max, 0.0)
+            if self.drawn >= 0.97:
+                self._swap(env)
+        # the cut: the hook under the stitch, the leg into its notch through the mouth, pressed onto its inner edge (notch_step)
         hook, c = hook_point(env)
-        hx, hy, hz = hook[0] - PAD_C[0], hook[1] - (PAD_C[1] + gap * 0.0), hook[2]
+        hx, hy, hz = hook[0] - PAD_C[0], hook[1] - PAD_C[1], hook[2]
         low = cutter_low_corners(c)
         on_skin = (np.abs(low[:, 0] - PAD_C[0]) < 0.06) & (np.abs(low[:, 1] - PAD_C[1]) < 0.04)
         if (on_skin & (low[:, 2] < SKIN - DIG)).any():
             self.dug = True  # any of the cutter's lowest corners more than 2 mm into the silicone, anywhere on the skin: pressed through it
         self.hook_st = hook_beneath(self.hook_st, (hx, hy, hz), lift, gap)
-        if self.cut_side != "both":
+        if self.cut_side != "both" and not self.swapped:
             ready = bool(self.hook_st[0] and lift >= 0.001)
             for leg, ly in (("far", PAD_C[1] - R_ARC), ("near", PAD_C[1] + R_ARC + gap)):
                 if leg == self.cut_side:
                     continue
-                pw = np.array([[PAD_C[0], ly, z] for z in np.linspace(SKIN, SKIN + lift + 0.0008, 6)])
+                pw = np.array([[PAD_C[0], ly, z] for z in np.linspace(SKIN, SKIN + lift + 0.0008, 24)])
                 self.notch[leg], k = notch_step(self.notch[leg], c.to_local(pw), ready)
                 self.floor_min[leg] = min(self.floor_min[leg], hz) if self.notch[leg][1] else 1.0  # the notch's lowest while the leg is in it
                 if k is None:
@@ -286,22 +372,14 @@ class Stitch:
                     self.cut_side = "both"  # the other leg cut too: the buried part is left in the skin
                 else:
                     self.cut, self.cut_h, self.cut_side = True, max(float(self.floor_min[leg] - SKIN), 0.0), leg  # cut just over the foot, flush at best
+                    _drive(env, "draw", 100.0, F_R * RC, target=draw)
                 try:
                     m.set_visible(f"{m.ENV_PATH}/pad/draw/visual/{leg}_leg", False)
                 except Exception:
                     pass
-        if self.shown != self.on_gauze:
-            self.shown = self.on_gauze
-            for nm in ("knot", "loop", "near_leg", "far_leg") + tuple(f"arc_{k}" for k in range(9)):
-                try:
-                    m.set_visible(f"{m.ENV_PATH}/pad/draw/visual/{nm}", not self.on_gauze and not (nm.endswith("_leg") and self.cut and nm.startswith(self.cut_side or "x")))
-                except Exception:
-                    pass
-            for nm in ("suture_out", "knot_out"):
-                try:
-                    m.set_visible(f"{m.ENV_PATH}/rests/visual/{nm}", self.on_gauze)
-                except Exception:
-                    pass
+        th = m.state(env, "thread")
+        tail = th.to_world(np.array([[0.0, -(THREAD_LEN + 0.0011), 0.0]]))[0]
+        self.on_gauze = bool(self.swapped and thread_on_gauze(th.pos, tail, float(np.linalg.norm(th.lin_vel))))
         tips = m.fingertips(env)
         gz = (GAUZE[0], GAUZE[1], 0.0375, 0.0375)
         along = np.linspace(0.0, 1.0, 5)[:, None]
@@ -312,15 +390,16 @@ class Stitch:
         out_x = np.maximum(np.abs(tips[:, 0] - PAD_C[0]) - BLOCK[0] / 2, 0.0)
         out_y = np.maximum(np.abs(tips[:, 1] - PAD_C[1]) - BLOCK[1] / 2, 0.0)
         clear = bool(np.min(np.hypot(out_x, out_y)) > 0.04)  # every fingertip of both hands 4 cm outside the pad block's outline
-        self.last = {"t": round(self.steps * float(env.unwrapped.step_dt), 2), "held": self.held, "closed": bool(closed), "forceps_mm": round(fb * 120, 2),
+        self.last = {"t": round(self.steps * float(env.unwrapped.step_dt), 2), "grasped": self.grasped, "closed": bool(closed), "forceps_mm": round(fb * 120, 2),
                      "lift_mm": round(lift * 1000, 2), "lifted_max_mm": round(self.lifted_max * 1000, 2), "gap_mm": round(gap * 1000, 2), "gap_max_mm": round(self.gap_max * 1000, 2),
                      "cut": self.cut, "cut_h_mm": None if self.cut_h is None else round(self.cut_h * 1000, 2), "cut_side": self.cut_side,
-                     "drawn": round(self.drawn, 3), "draw_deg": round(math.degrees(draw), 1), "on_gauze": self.on_gauze, "broke": self.broke, "dug": self.dug,
-                     "in_rests": [in_rest_f, in_rest_c], "clear": clear, "stitch_dropped": self.stitch_dropped,
+                     "drawn": round(self.drawn, 3), "draw_deg": round(math.degrees(draw), 1), "swapped": self.swapped, "on_gauze": self.on_gauze, "broke": self.broke, "dug": self.dug,
+                     "in_rests": [in_rest_f, in_rest_c], "clear": clear,
+                     "thread_pos_mm": [round(float(v) * 1000, 1) for v in (th.pos - np.array([GAUZE[0], GAUZE[1], TOP]))],
                      "forceps_pos_mm": [round(float(v) * 1000, 1) for v in (f.pos - np.array([FORCEPS_REST[0], FORCEPS_REST[1], TOP]))],
                      "cutter_pos_mm": [round(float(v) * 1000, 1) for v in (c.pos - np.array([CUTTER_REST[0], CUTTER_REST[1], TOP]))],
                      "tip_from_knot_mm": [round(float(v) * 1000, 1) for v in (tip - knot)], "hook_mm": [round(hx * 1000, 1), round(hy * 1000, 1), round((hz - SKIN) * 1000, 2)],
-                     "cutter_low_mm": round(float(low[:, 2].min() - SKIN) * 1000, 2), "notch": {k: list(v) for k, v in self.notch.items()}}
+                     "cutter_low_mm": round(float(low[:, 2].min() - SKIN) * 1000, 2), "cutter_tilt": round(float(c.tilt_deg()), 1), "notch": {k: list(v) for k, v in self.notch.items()}}
         self.hold = self.hold + 1 if _tier(self.last) == 1.0 else 0
         self.full = self.full or self.hold >= HOLD_STEPS
         self.last["hold"] = self.hold
@@ -332,7 +411,7 @@ def _tier(r) -> float:
     if not r or r["broke"] or r["dug"]:
         return 0.0
     s = 0.0
-    if r["lifted_max_mm"] >= 2.0:
+    if r["lifted_max_mm"] >= 2.0 and r.get("grasped", True):
         s = 0.25
     if s and r["cut"] and r["cut_side"] in ("far", "both") and r["cut_h_mm"] is not None and r["cut_h_mm"] <= 2.0:
         s = 0.5
@@ -360,15 +439,18 @@ def success(objects) -> bool:
 
 # -- the scripted demo ---------------------------------------------------------------------------------------------------------------------------
 
-FORCEPS_W = 0.0076  # the forceps' arms across, where the hand holds them
+FORCEPS_W = 0.0126  # the forceps' arms across, where the hand holds them
+CUT_TILT = 50.0  # degrees: the cutter leans back toward the right arm's side (-y), its blade's plane still across the strand's line
 
 
 def demo_script(ctx):
-    """Modes: full, the solution. nolift (failure check): the forceps never take the knot (closing on it lifts it about 1.4 mm), the cutter goes for the
-    far leg as in the demo. away (failure check): drawn out away from the wound. above (failure check): the hook brought straight down onto the far
-    leg through the lifted loop, then drawn across it. preclosed (failure check): the forceps squeezed shut before they reach the knot, then pressed
-    to it and lifted. hover (failure check): the demo, but the instruments are held over their trays at the end, never let go. regrasp (failure check): drawn out, the
-    stitch let go over the pad, the forceps closed again at the knot's old place and carried to the gauze."""
+    """Modes: full, the solution. nolift (failure check): the forceps never take the knot, the cutter goes for the far leg as in the demo. away
+    (failure check): drawn out away from the wound. above (failure check): the hook brought straight down onto the far leg through the lifted loop,
+    then drawn across it. preclosed (failure check): the forceps squeezed shut before they reach the knot, then pressed to it and lifted. hover
+    (failure check): the demo, but the instruments are held over their trays at the end, never let go. drop (failure check): the stitch drawn out,
+    then let go over the pad: it falls on the pad and the hands go on to the gauze with nothing in the jaws.
+    The forceps stay upright in the left hand, the jaws closing along x; the cutter leans 50 degrees toward -y in the right hand, so the two hands
+    work the one stitch from either side of it."""
     env = ctx.emb._env
     L, R = ctx.left, ctx.right
     mode = ctx.mode
@@ -376,87 +458,112 @@ def demo_script(ctx):
         yield from L.wait(1.5)
         print("[su] END " + json.dumps({"mode": mode, **STITCH.last}), flush=True)
         return
-    g0 = d.down(0.0)
+    # left fingers along x; right fingers across the cutter's flat blade (along y), then the hand leaning back toward -y, which keeps its wrist camera
+    # to one side (x) of the forceps
+    t = math.radians(CUT_TILT)
+    gF, gC0 = d.down(-90.0), d.down(0.0)
+    gC = d._as_grip(np.array([[1.0, 0.0, 0.0], [0.0, math.cos(t), -math.sin(t)], [0.0, math.sin(t), math.cos(t)]]) @ gC0.rot)
     f0, c0 = m.state(env, "forceps").pos.copy(), m.state(env, "cutter").pos.copy()
-    # both instruments out of their rests: the forceps held lightly (under its arms' preload, so it stays open), the cutter pinched by its flat body
-    yield from ctx.together(L.move(f0 + np.array([0.0, 0.0, 0.08]), grip=g0, finger=d.FINGER_OPEN, t=2.0, label="over the forceps"),
-                            R.move(c0 + np.array([0.0, 0.0, 0.08]), grip=g0, finger=d.FINGER_OPEN, t=2.0, label="over the cutter"))
+    # both instruments out of their rests: the forceps held lightly (under its arms' preload, so it stays open), the cutter pinched by its flat blade
+    yield from ctx.together(L.move(f0 + np.array([0.0, 0.0, 0.08]), grip=gF, finger=d.FINGER_OPEN, t=2.0, label="over the forceps"),
+                            R.move(c0 + np.array([0.0, 0.0, 0.08]), grip=gC0, finger=d.FINGER_OPEN, t=2.0, label="over the cutter"))
     yield from ctx.together(L.move(f0, t=1.0, label="fingers either side of the forceps"), R.move(c0, t=1.0, label="fingers either side of the cutter"))
-    yield from ctx.together(L.close(FORCEPS_W, force=1.4, label="hold the forceps lightly"), R.close(label="pinch the cutter"))
+    yield from ctx.together(L.close(FORCEPS_W, force=0.8, label="hold the forceps lightly"), R.close(label="pinch the cutter"))
     yield from ctx.together(L.move(L.at() + np.array([0.0, 0.0, 0.10]), t=1.0, label="forceps out"), R.move(R.at() + np.array([0.0, 0.0, 0.08]), t=1.0, label="cutter out"))
     tip = lambda: forceps_tips(env)[0]  # noqa: E731
     hook = lambda: hook_point(env)[0]  # noqa: E731
-    pad = m.state(env, "pad")
-    knot = np.array([PAD_C[0], PAD_C[1] + KNOT_Y, SKIN + 0.0012])
-    gl = d.tilted(45.0, -90.0)  # the forceps pointing down toward -y, from the knot's side
-    # the forceps' tips over the knot, then onto it, squeezed shut, and the knot lifted 2 mm
-    yield from L.move(knot + np.array([0.0, 0.0, 0.012]) - TIP_L * L.approach_axis(gl), grip=gl, t=2.0, label="the forceps' tips over the knot")
+    knot = np.array([PAD_C[0], PAD_C[1] + KNOT_Y, SKIN + KZ])
+    # open jaws aimed so that arm A's inner face stands 0.5 mm off the knot's side (arm B then closes the 9 mm opening onto the other side)
+    aim = lambda dz: knot + np.array([0.0, 0.0, dz]) + m.state(env, "forceps").rotation() @ np.array([0.0, -0.0025, 0.0])  # noqa: E731
+    yield from L.move(aim(0.012) + np.array([0.0, 0.0, TIP_L]), grip=gF, t=2.0, label="the forceps' tips over the knot")
     if mode == "preclosed":
         yield from L.close(0.003, force=6.0, label="squeeze the forceps shut before they reach the knot")
-    yield from L.servo(knot + np.array([0.0, 0.0, 0.010]), tol=0.001, timeout=1.5, gain=0.4, read=tip, label="tips 10 mm over the knot")
+    yield from L.servo(lambda s: aim(0.010), tol=0.0004, timeout=3.0, gain=0.4, read=tip, label="tips 10 mm over the knot")
+    yield from L.servo(lambda s: aim(0.004), tol=0.0003, timeout=2.0, gain=0.3, read=tip, label="tips 4 mm over the knot, either side of it")
     if mode != "nolift":
-        yield from L.servo(knot, tol=0.0008, timeout=1.5, gain=0.4, read=tip, label="tips on the knot")
+        yield from L.servo(lambda s: aim(-0.0003), tol=0.0003, timeout=2.5, gain=0.3, read=tip, label="tips down either side of the knot")
         if mode != "preclosed":
             yield from L.close(0.003, force=6.0, label="squeeze the forceps shut on the knot")
         print("[su] grasped: " + json.dumps(STITCH.last), flush=True)
-        yield from L.servo(knot + np.array([0.0, 0.0, 0.0022]), tol=0.0005, timeout=1.5, gain=0.4, read=tip, label="lift the knot 2 mm")
+        yield from L.servo(knot + np.array([0.0, 0.0, 0.0030]), tol=0.0004, timeout=2.0, gain=0.3, read=tip, label="lift the knot 3 mm")
     print("[su] lifted: " + json.dumps(STITCH.last), flush=True)
-    # the cutter held upright, its notch opening toward -x: slid in across the far leg at the skin, the leg into the notch, then pressed onto its edge
-    far = np.array([PAD_C[0], PAD_C[1] - R_ARC, SKIN + 0.0006])  # the notch's floor 0.6 mm over the skin line (the foot 0.2 mm into it)
-    to_hand = np.array([-(NOTCH_X0 + NOTCH_X1) / 2, 0.0, TIP_L - FOOT_H])  # from the notch's floor to where the hand holds the cutter
-    if mode == "above":  # the hook straight down through the loop onto the far leg: the strand has no collider, so only the scorer stops this
-        yield from R.move(far + np.array([0.0, 0.0, 0.012]) + to_hand, grip=g0, t=2.0, label="the hook over the far leg")
+    # the cutter leaning back toward -y, its notch opening toward -x: slid in across the far leg at the skin, the leg into the notch, then pressed onto
+    # its edge; the hook steered by its own observed place every step
+    far = np.array([PAD_C[0], PAD_C[1] - R_ARC + 0.0006, SKIN + 0.0006])  # the notch's floor 0.6 mm over the skin line, the blade's plane crossing the leg 0.6 mm up
+    to_hand = (gC.rot @ gC0.rot.T) @ np.array([-(NOTCH_X0 + NOTCH_X1) / 2, 0.0, TIP_L - FOOT_H])  # from the notch's floor to where the hand holds the cutter
+    if mode == "above":  # the hook straight down through the loop onto the far leg: only the scorer stops this
+        yield from R.move(far + np.array([0.0, 0.0, 0.012]) + to_hand, grip=gC, t=2.0, label="the hook over the far leg")
         yield from R.servo(far, tol=0.0005, timeout=3.0, gain=0.06, read=hook, label="the hook down onto the far leg, through the loop")
         yield from R.servo(lambda s: far - np.array([min(s / 1.5, 1.0) * 0.0015, 0.0, 0.0]), tol=0.0005, timeout=2.5, gain=0.06, read=hook,
                            label="press it across the leg")
         print("[su] cut: " + json.dumps(STITCH.last), flush=True)
-        yield from R.move(R.at() + np.array([0.012, 0.0, 0.04]), t=1.0, label="the cutter away")
+        yield from R.move(R.at() + np.array([0.0, -0.02, 0.04]), t=1.0, label="the cutter away")
         yield from L.wait(1.0)
         print("[su] END " + json.dumps({"mode": mode, **STITCH.last}), flush=True)
         return
-    yield from R.move(far + np.array([0.012, 0.0, 0.012]) + to_hand, grip=g0, t=2.0, label="the hook beside the far leg, 12 mm out")
-    # the hook's servos are slow (gain 0.06), so the hand's lag does not swing the hook across the blade's plane, out of the notch's band
-    yield from R.servo(far + np.array([0.010, 0.0, 0.003]), tol=0.0006, timeout=2.5, gain=0.08, read=hook, label="the hook 3 mm over the skin, 10 mm out")
-    yield from R.servo(far + np.array([0.010, 0.0, 0.0]), tol=0.0003, timeout=2.5, gain=0.06, read=hook, label="the hook down level with the leg's foot")
-    # one servo from 10 mm out to 2.5 mm past the leg on a smooth (cosine) profile, so the hand starts and stops gently and the hook stays in the
-    # blade's plane
-    ease = lambda s: 0.5 - 0.5 * math.cos(math.pi * min(s / 4.0, 1.0))  # noqa: E731
-    for attempt in range(3):  # if the leg slipped past the notch (the hook wanders about 1 mm across), back out 10 mm and slide in again
-        if attempt:
-            print(f"[su] no cut: the hook backed out for try {attempt + 1}", flush=True)
-            yield from R.servo(lambda s: far + np.array([-0.0025 + ease(s * 2.0) * 0.0125, 0.0, 0.0]), tol=0.0005, timeout=2.5, gain=0.06, read=hook,
-                               label="the hook backed out 10 mm across the leg")
-            yield from R.servo(far + np.array([0.010, 0.0, 0.0]), tol=0.0003, timeout=1.5, gain=0.06, read=hook, label="the hook level with the leg's foot again")
-        yield from R.servo(lambda s: far + np.array([0.010 - ease(s) * 0.0125, 0.0, 0.0]), tol=0.0005, timeout=5.5, gain=0.06, read=hook,
-                           label="slide the hook in across the leg, the leg into the notch, and press it onto the notch's edge: cut")
-        if STITCH.cut or mode == "nolift":
-            break
-    print("[su] cut: " + json.dumps(STITCH.last), flush=True)
-    yield from R.move(R.at() + np.array([0.0, 0.0, 0.03]), t=0.8, label="the cutter up off the skin")
-    yield from R.move(R.at() + np.array([0.02, -0.02, 0.02]), t=0.8, label="the cutter away")
-    # the stitch drawn out by the knot, toward the wound (or away, the cheat check)
-    d_out = np.array([0.0, 0.010, 0.008]) if mode == "away" else np.array([0.0, -0.010, 0.008])
+    knot_now = lambda: (lambda tr: tr[0] + tr[1] @ KNOT_LOCAL)(draw_pose(env))  # noqa: E731  the knot's own observed place
+
+    def hold_knot():  # the left keeps the knot 3 mm up, steered by the knot's observed height, while the right works under it
+        while True:
+            yield from L.servo(knot + np.array([0.0, 0.0, 0.0030]), tol=0.0003, timeout=1.0, gain=0.2, read=knot_now, label="hold the knot 3 mm up")
+
+    def cut():
+        yield from R.move(far + np.array([0.012, 0.0, 0.012]) + to_hand, grip=gC, t=2.0, label="the hook beside the far leg, 12 mm out")
+        # the hook's servos are slow (gain 0.06), so the hand's lag does not swing the hook across the blade's plane, out of the notch's band
+        yield from R.servo(far + np.array([0.010, 0.0, 0.003]), tol=0.0006, timeout=2.5, gain=0.08, read=hook, label="the hook 3 mm over the skin, 10 mm out")
+        yield from R.servo(far + np.array([0.010, 0.0, 0.0]), tol=0.0003, timeout=2.5, gain=0.06, read=hook, label="the hook down level with the leg's foot")
+        ease = lambda s: 0.5 - 0.5 * math.cos(math.pi * min(s / 4.0, 1.0))  # noqa: E731
+        for attempt in range(3):  # if the leg slipped past the notch, back out 10 mm and slide in again
+            if attempt:
+                print(f"[su] no cut: the hook backed out for try {attempt + 1}", flush=True)
+                yield from R.servo(lambda s: far + np.array([-0.0025 + ease(s * 2.0) * 0.0125, 0.0, 0.0]), tol=0.0005, timeout=2.5, gain=0.06, read=hook,
+                                   label="the hook backed out 10 mm across the leg")
+                yield from R.servo(far + np.array([0.010, 0.0, 0.0]), tol=0.0003, timeout=1.5, gain=0.06, read=hook, label="the hook level with the leg's foot again")
+            yield from R.servo(lambda s: far + np.array([0.010 - ease(s) * 0.0125, 0.0, 0.0]), tol=0.0005, timeout=5.5, gain=0.06, read=hook,
+                               label="slide the hook in across the leg, the leg into the notch, and press it onto the notch's edge: cut")
+            if STITCH.cut or mode == "nolift":
+                break
+        print("[su] cut: " + json.dumps(STITCH.last), flush=True)
+        yield from R.move(R.at() + np.array([0.0, -0.01, 0.03]), t=0.8, label="the cutter up off the skin")
+        yield from R.move(R.at() + np.array([0.0, -0.04, 0.03]), t=0.8, label="the cutter away")
+
+    done, hold, run = object(), hold_knot(), cut()
+    while next(run, done) is not done:
+        if mode != "nolift":
+            next(hold)
+        yield
+    # the stitch drawn out by the knot along its track: up and back toward the wound (or away from it, the cheat check)
     k1 = tip()
-    yield from L.servo(lambda s: k1 + min(s / 2.0, 1.0) * d_out, tol=0.001, timeout=3.0, gain=0.4, read=tip, label="draw the stitch out toward the wound")
+    if mode == "away":
+        d_out = np.array([0.0, 0.010, 0.008])
+        yield from L.servo(lambda s: k1 + min(s / 2.0, 1.0) * d_out, tol=0.001, timeout=3.0, gain=0.4, read=tip, label="draw the stitch out away from the wound")
+    else:
+        ctr = np.array([0.0, -RC, 0.0])
+        circ = lambda th: np.array([0.0, RC * math.cos(th), RC * math.sin(th)]) + ctr  # noqa: E731
+        yield from L.servo(lambda s: k1 + circ(math.radians(DRAW_FULL + 2.0) * min(s / 5.0, 1.0)) - circ(0.0), tol=0.0008, timeout=7.0, gain=0.4, read=tip,
+                           label="draw the stitch out along its track, up and back toward the wound")
     print("[su] drawn: " + json.dumps(STITCH.last), flush=True)
-    if mode == "regrasp":  # the stitch let go over the pad, the forceps closed again at the knot's old place, then carried to the gauze as in the demo
-        yield from L.close(FORCEPS_W, force=1.4, label="let the stitch go over the pad")
-        yield from L.servo(knot + np.array([0.0, 0.0, 0.0024]), tol=0.0008, timeout=1.5, gain=0.4, read=tip, label="the tips back at the knot's old place")
-        yield from L.close(0.003, force=6.0, label="close them there again")
-        print("[su] re-grasped: " + json.dumps(STITCH.last), flush=True)
-    # the stitch on the gauze, the instruments back in their rests
-    yield from ctx.together(L.move(np.array([GAUZE[0], GAUZE[1], TOP + 0.03]) - TIP_L * L.approach_axis(gl), t=2.0, label="over the gauze"),
-                            R.move(c0 + np.array([0.0, 0.0, 0.08]), grip=g0, t=2.0, label="the cutter over its rest"))
-    yield from ctx.together(L.close(FORCEPS_W, force=1.4, label="let the stitch go on the gauze"), R.move(c0 + np.array([0.0, 0.0, 0.002]), t=1.0, label="the cutter into its rest"))
+    if mode == "drop":
+        yield from L.close(FORCEPS_W, force=0.8, label="let the stitch go over the pad")
+        yield from L.wait(1.0)
+    # the stitch carried in the jaws to the gauze and let go a little over it; the cutter back to its rest
+    over_gauze = np.array([GAUZE[0], GAUZE[1] + 0.010, TOP + 0.025])
+    yield from ctx.together(L.move(over_gauze + np.array([0.0, 0.0, 0.02 + TIP_L]), grip=gF, t=2.5, label="over the gauze"),
+                            R.move(c0 + np.array([0.0, 0.0, 0.08]), grip=gC0, t=2.5, label="the cutter over its rest"))
+    yield from ctx.together(L.servo(over_gauze, tol=0.002, timeout=1.5, gain=0.4, read=tip, label="the jaws low over the gauze"),
+                            R.move(c0 + np.array([0.0, 0.0, 0.002]), t=1.5, label="the cutter into its rest"))
+    yield from L.close(FORCEPS_W, force=0.8, label="let the stitch go on the gauze")
+    yield from L.wait(0.5)
     print("[su] on gauze: " + json.dumps(STITCH.last), flush=True)
     if mode != "hover":
         yield from R.open(label="let go of the cutter")
     yield from L.move(L.at() + np.array([0.0, 0.0, 0.05]), t=0.8, label="the forceps up off the gauze")
-    yield from L.close(0.003, force=6.0, label="hold the forceps firmly, shut, to carry it back")  # held lightly, it can leave the hand on the way back
-    yield from ctx.together(L.move(f0 + np.array([0.0, 0.0, 0.08]), grip=g0, t=3.0, label="the forceps over its rest"), R.move(R.at() + np.array([0.0, 0.0, 0.08]), t=1.0, label="right up"))  # slowly, so it stays in the grip
-    yield from L.move(f0 + np.array([0.0, 0.0, 0.012]), t=1.0, label="the forceps into its rest")
+    yield from L.close(0.003, force=6.0, label="hold the forceps firmly, shut, to carry it back")
+    yield from ctx.together(L.move(f0 + np.array([0.0, 0.0, 0.08]), grip=gF, t=3.0, label="the forceps over its rest"), R.move(R.at() + np.array([0.0, 0.0, 0.08]), t=1.0, label="right up"))
+    # the tips steered by their own observed place: over the slot, above the foam, then straight down into it to the rest's floor
+    yield from L.servo(np.array([FORCEPS_REST[0], FORCEPS_REST[1], TOP + 0.045]), tol=0.001, timeout=2.0, gain=0.4, read=tip, label="the forceps' tips over the rest's slot")
     floor = np.array([FORCEPS_REST[0], FORCEPS_REST[1], TOP + 0.004 + 0.002])  # the rest's floor, under the slot
-    yield from L.servo(floor, tol=0.0015, timeout=1.5, gain=0.4, read=tip, label="the forceps' tips down to the rest's floor (they may have slid in the hand)")
+    yield from L.servo(floor, tol=0.0015, timeout=2.5, gain=0.3, read=tip, label="the forceps' tips down into the slot to the rest's floor")
     if mode != "hover":
         yield from L.open(label="let go of the forceps")
     yield from ctx.together(L.move(L.at() + np.array([0.0, 0.0, 0.10]), t=1.0, label="left straight up"), R.move(R.at() + np.array([0.0, 0.0, 0.04]), t=1.0, label="right up"))

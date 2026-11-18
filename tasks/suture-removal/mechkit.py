@@ -526,7 +526,7 @@ def free(name: str, pos, parts, colliders, looks, mass: float, friction=(0.9, 0.
 
 
 def mechanism(name: str, pos, links, looks, frame_parts=(), frame_colliders=(), yaw_deg: float = 0.0, friction=(1.2, 1.0), solver_iters: int = 32, start=(), free_mass: float | None = None, start_quat: tuple | None = None,
-              frame_inertia: tuple = (0.01, 0.01, 0.01)) -> Part:
+              frame_inertia: tuple = (0.01, 0.01, 0.01), torsional_patch: float | None = None) -> Part:
     """An articulation: a frame, with `frame_parts` and `frame_colliders`, and each `Link` on its joint. `start` gives (link name, joint value) to differ from joint zero at a reset.
     The frame is fixed in place, unless `free_mass` gives it a mass in kg: it then stands free on what is under it, and needs colliders. `start_quat`, xyzw, starts a free one in any rotation.
     `frame_inertia` is the frame's principal inertia along the part's x, y, z (kg m^2); the default suits a fixed frame, not a free slender one (README, 16)."""
@@ -559,7 +559,7 @@ def mechanism(name: str, pos, links, looks, frame_parts=(), frame_colliders=(), 
 
     limits = tuple((k.joint, *(math.radians(v) if k.kind == "hinge" else v for v in (k.lower, k.upper))) for k in links if math.isfinite(k.lower) and math.isfinite(k.upper))
     return Part(name, pos=tuple(pos), size=(0.1, 0.1, 0.1), role="jointed", build=build, friction=friction, yaw_deg=yaw_deg, start_quat=start_quat, limits=limits,
-                drives=tuple((k.joint, k.gains()) for k in links), start_joints=tuple((f"{n}_joint", v) for n, v in start))
+                torsional_patch=torsional_patch, drives=tuple((k.joint, k.gains()) for k in links), start_joints=tuple((f"{n}_joint", v) for n, v in start))
 
 
 @dataclass(frozen=True)
@@ -631,7 +631,10 @@ def _arena_object(spec: Part):
                                       init_state=ArticulationCfg.InitialStateCfg(joint_pos=start), actuators=actuators)
                 return self._add_initial_pose_to_cfg(cfg)
 
-        return Jointed(name=spec.name, object_type=ObjectType.ARTICULATION, usd_path=usd, initial_pose=pose)
+        addon = {}
+        if spec.torsional_patch:  # a pinch on its links resists turning about the pinch axis, as on a free part
+            addon = {"collision_props": sim_utils.CollisionPropertiesCfg(torsional_patch_radius=spec.torsional_patch, min_torsional_patch_radius=0.8 * spec.torsional_patch)}
+        return Jointed(name=spec.name, object_type=ObjectType.ARTICULATION, usd_path=usd, initial_pose=pose, spawn_cfg_addon=addon)
     material = sim_utils.RigidBodyMaterialCfg(static_friction=spec.friction[0], dynamic_friction=spec.friction[1])
     collision: dict[str, Any] = {"contact_offset": 0.005, "rest_offset": 0.0}
     if spec.torsional_patch:
