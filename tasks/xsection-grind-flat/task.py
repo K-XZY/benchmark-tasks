@@ -1,9 +1,10 @@
 """Grind a mounted chip package's cross-section flat by hand on a turning abrasive disc, down to the line scribed round the mount.
 
 A benchtop grinder-polisher: one 203 mm platen with P180 silicon-carbide paper, turning anticlockwise (seen from above) at 150 rpm in a
-splash bowl. A 32 mm epoxy mount, 35 mm tall, holding a strip sawn from a BGA package edge-on, stands face down on a rest. One hand holds
-the mount face down on the turning paper, presses it, sweeps it between the platen's centre and edge and keeps it flat, until the face
-reaches the line scribed 0.3 mm above it; then it sets the mount back on its rest and moves clear.
+splash bowl. A 32 mm epoxy mount, 35 mm tall, holding a strip sawn from a BGA package edge-on, stands face down on a rest, its upper end
+clamped in a hand holder: a cup with a flange and a knob with two flats on top. One hand holds the mount by the knob, face down on the
+turning paper, presses it, sweeps it between the platen's centre and edge and keeps it flat, until the face reaches the line scribed
+0.3 mm above it; then it sets the mount back on its rest and moves clear. Each finger is capped at 40 N.
 
 Removal is a rule (a simulator can't remove material): Preston's law with a threshold pressure, on a 2 mm grid over the face.
   - The push is the force the platen really carries: the platen rides on a stiff vertical spring (20 N/mm), and its deflection gives it.
@@ -13,8 +14,9 @@ Removal is a rule (a simulator can't remove material): Preston's law with a thre
   - Tuned to the real hand rate of about 0.1 mm per minute: a flat face loses 0.3 mm in about 120 s under 15 N, in about 190 s under 11 N; under 5 N little (threshold 4.5 kPa, about 3.6 N over the face).
 The mount's collider keeps its full length; the removed depth is kept in the height map. The scribed line drawn on the mount's side moves
 down as the mean stock left shrinks (0.05 mm steps), as the face rises to the line on a real mount.
+Scored at five marked points, as a real trial measures them before and after: four on the circle 2 mm in from the rim, and the centre.
 
-    python demokit.py task.py OUT --no-record --mode full,none,tilted,light,over,leave,keep,hover
+    python demokit.py task.py OUT --no-record --mode full,none,tilted,oneside,light,over,leave,keep,hover
     python demokit.py task.py OUT                                      final film
 """
 
@@ -43,8 +45,8 @@ TOP = d.TABLE_TOP
 
 # -- the grinder-polisher (positions in the station frame, metres; heights above the table top) ---------------------------------
 PLATEN_XY = (0.28, -0.16)
-BODY_H = 0.12  # the machine body's top, which is the bowl's floor
-PAPER_Z = 0.14  # the paper's top above the table
+BODY_H = 0.10  # the machine body's top, which is the bowl's floor
+PAPER_Z = 0.12  # the paper's top above the table
 PLATEN_R = 0.1015  # 8 in
 BOWL_R, BOWL_RIM = 0.15, 0.16  # the splash bowl: 30 cm across, its rim 2 cm above the paper
 RPM = 150.0
@@ -55,7 +57,15 @@ PAPER_MAT = MOUNT_MAT = FRICTION
 
 # -- the mount and its rest ------------------------------------------------------------------------------------------------------
 MOUNT_R, MOUNT_H, MOUNT_KG = 0.016, 0.035, 0.040
-REST_XY, REST_H, REST_HALF = (0.20, -0.42), 0.06, 0.025
+# the hand holder (printed PETG, sizes ours): a cup over the mount's upper 15 mm, closed by a 4 mm top whose 60 mm flange shields the hand
+# from spray, and on it a knob 26 mm long and 20 mm across two flats, 18 mm tall. The fingers close on the flats with their tips just over
+# the flange, so the push goes down through the flange, not through the pads' friction.
+CUP_R, CUP_Z0, FLANGE_R, FLANGE_Z0, FLANGE_Z1 = 0.022, 0.020, 0.030, MOUNT_H, MOUNT_H + 0.004
+KNOB = (0.026, 0.020, 0.018)  # x (along the flats), y (across the flats, the jaws' axis), z
+KNOB_TOP = FLANGE_Z1 + KNOB[2]
+HOLDER_KG = 0.035
+FINGER_N_MAX = 40.0  # N: each finger's force is capped here (Robocurve's figure for the YAM)
+REST_XY, REST_H, REST_HALF = (0.20, -0.42), 0.04, 0.025
 LINE_MM = 0.30  # the scribed line above the face (the last 0.3 mm of the P180 step)
 
 # -- removal (Preston's law with a threshold) ----------------------------------------------------------------------------------------
@@ -66,35 +76,29 @@ P_THRESH = 4500.0  # Pa: below this the grains rub and do not cut (about 3.6 N o
 V_NOMINAL = 0.9  # m/s, a typical speed over the paper while sweeping 3.5 to 8 cm out
 K_PRESTON = 0.0025e-3 / ((15.0 / FACE_A - P_THRESH) * V_NOMINAL)  # 1/Pa: 0.15 mm/min at 15 N, 0.1 mm/min at 11 N
 GROUND_MM = 0.05  # a point counts as ground once this much is gone
-QUAD_MM = 12.0  # the four quadrant points' distance from the axis
-RIM_MM = 14.0  # 2 mm in from the rim
-EDGE_MM = 15.5  # 0.5 mm in from the rim: a sliver the 2 mm grid would miss
-N_RIM = 16  # points on the 14 mm ring (the 15.5 mm ring follows)
+RING_MM = 14.0  # the four edge points: on the circle 2 mm in from the rim, at 0, 90, 180 and 270 degrees; the fifth is the centre
 V_DROP = 0.3  # m/s: a mount this fast with no hand near it has been dropped or thrown
 F_MAX = 25.0  # N: a push beyond this is not a hand pressing a mount (machine heads load 18 to 27 N)
 CONTACT_GAP = 0.0015  # m: the mount's lowest point this close to the paper is touching it (the paper and the gripper's grip give a little)
-LOW_MM, HIGH_MM, SPREAD_MM, PLANE_DEG = 0.23, 0.37, 0.10, 2.0
+LOW_MM, HIGH_MM, SPREAD_MM = 0.23, 0.37, 0.10
 CLEAR_M = 0.03  # the hand clear of the mount at the end
 TIP_BELOW = 0.004  # fingertips() points sit about 5 mm below the fingers' real underside (kit README 22): 4 mm below the paper is a finger on it
 STILL_STEPS = 20  # 1 s at 20 Hz
 
 
 def _grid():
-    """Face points in the mount's frame (mm): a 2 mm grid over the face, then the four quadrant points, then 16 points 2 mm in from the rim."""
+    """Face points in the mount's frame (mm): a 2 mm grid over the face (the contact model), then the five scored points."""
     g = np.arange(-15.0, 16.0, GRID_MM)
     uu, vv = np.meshgrid(g, g)
     keep = uu ** 2 + vv ** 2 <= (MOUNT_R * 1000) ** 2
     grid = np.c_[uu[keep], vv[keep]]
-    quad = np.array([[QUAD_MM, 0.0], [0.0, QUAD_MM], [-QUAD_MM, 0.0], [0.0, -QUAD_MM]])
-    a = np.linspace(0.0, 2 * math.pi, 16, endpoint=False)
-    rim = RIM_MM * np.c_[np.cos(a), np.sin(a)]
-    edge = EDGE_MM * np.c_[np.cos(a), np.sin(a)]
-    return grid, quad, np.vstack([rim, edge])
+    five = np.array([[RING_MM, 0.0], [0.0, RING_MM], [-RING_MM, 0.0], [0.0, -RING_MM], [0.0, 0.0]])
+    return grid, five
 
 
-GRID, QUAD, RIM = _grid()
-POINTS = np.vstack([GRID, QUAD, RIM]) / 1000.0  # metres, mount frame
-N_GRID, N_QUAD = len(GRID), len(QUAD)
+GRID, FIVE = _grid()
+POINTS = np.vstack([GRID, FIVE]) / 1000.0  # metres, mount frame
+N_GRID, N_FIVE = len(GRID), len(FIVE)
 AREA = np.r_[np.full(N_GRID, (GRID_MM / 1000) ** 2), np.zeros(len(POINTS) - N_GRID)]
 LINE_STEPS = 7  # lines drawn at 0.30, 0.25, ... 0.0 mm above the face; one shown at a time
 
@@ -108,6 +112,7 @@ LOOKS = {
     "strip": m.Look(m.rgb(0.10, 0.28, 0.12), roughness=0.6),
     "line": m.Look(m.rgb(0.75, 0.05, 0.05), roughness=0.6),
     "pla": m.Look(m.rgb(0.25, 0.45, 0.85), roughness=0.7),
+    "holder": m.Look(m.rgb(0.30, 0.30, 0.32), roughness=0.6),
 }
 
 
@@ -148,8 +153,16 @@ def _mount():
     for k in range(LINE_STEPS):  # line_k sits k twentieths of a mm above the face; line_6 (0.3 mm) shows at the start
         z = k * 0.00005
         parts.append((f"line_{k}", _ring(MOUNT_R - 0.0002, MOUNT_R + 0.00025, z + 0.0003, z + 0.0011), "line", k != LINE_STEPS - 1))
-    return m.free("mount", (*REST_XY, TOP + REST_H), parts, [m.col_cylinder("c", MOUNT_R, MOUNT_H, (0, 0, MOUNT_H / 2))],
-                  {k: LOOKS[k] for k in ("epoxy", "strip", "line")}, mass=MOUNT_KG, friction=(MOUNT_MAT, MOUNT_MAT))
+    cup_h = FLANGE_Z0 - CUP_Z0
+    parts += [("cup", _ring(MOUNT_R, CUP_R, CUP_Z0, FLANGE_Z0, 48), "holder"),
+              ("flange", m.cylinder(FLANGE_R, FLANGE_Z1 - FLANGE_Z0, (0, 0, 0.5 * (FLANGE_Z0 + FLANGE_Z1)), segments=48), "holder"),
+              ("knob", m.box(KNOB, (0, 0, FLANGE_Z1 + KNOB[2] / 2)), "holder")]
+    cols = [m.col_cylinder("c", MOUNT_R, MOUNT_H, (0, 0, MOUNT_H / 2)),
+            m.col_cylinder("cup_c", CUP_R, cup_h, (0, 0, CUP_Z0 + cup_h / 2)),
+            m.col_cylinder("flange_c", FLANGE_R, FLANGE_Z1 - FLANGE_Z0, (0, 0, 0.5 * (FLANGE_Z0 + FLANGE_Z1))),
+            m.col_box("knob_c", KNOB, (0, 0, FLANGE_Z1 + KNOB[2] / 2))]
+    return m.free("mount", (*REST_XY, TOP + REST_H), parts, cols, {k: LOOKS[k] for k in ("epoxy", "strip", "line", "holder")},
+                  mass=MOUNT_KG + HOLDER_KG, friction=(MOUNT_MAT, MOUNT_MAT))
 
 
 OBJECTS = [
@@ -205,26 +218,21 @@ def dropped(clear, speed, z, over_rest, rest_z):
     return bool(clear and (speed > V_DROP or (z > rest_z + 0.01 and not over_rest)))
 
 
-def plane_fit(depth_mm):
-    """Fit depth = a + b u + c v over the grid; returns the plane's slope against the original face (deg) and the largest misfit (mm)."""
-    A = np.c_[np.ones(N_GRID), GRID]
-    coef, *_ = np.linalg.lstsq(A, depth_mm[:N_GRID], rcond=None)
-    slope = math.degrees(math.atan(math.hypot(coef[1], coef[2])))
-    return slope, float(np.abs(A @ coef - depth_mm[:N_GRID]).max())
+def five_points(depth_mm):
+    """Removal (mm) at the five scored points: the four 2 mm in from the rim, then the centre."""
+    return np.asarray(depth_mm)[N_GRID:N_GRID + N_FIVE]
 
 
 def rungs(depth_mm, on_rest=False, clear=False, still_done=False, thrown=False, touched=False):
-    """The scoring text's table from the face's removed depths (mm, in POINTS order) and the end-state flags. Returns (score, reached, failed)."""
-    grid = depth_mm[:N_GRID]
-    quad = depth_mm[N_GRID:N_GRID + N_QUAD]
-    five = np.r_[quad, depth_mm[N_GRID + N_QUAD:]]  # the quadrant points and both rim rings (the deepest point is the fifth)
-    edge = depth_mm[N_GRID + N_QUAD + N_RIM:]
-    over = bool(five.max() > HIGH_MM or grid.max() > HIGH_MM + 0.05)
+    """The scoring text's table from the removal at the five points (mm, read from `depth_mm` in POINTS order) and the end-state flags.
+    Returns (score, reached, failed)."""
+    five = five_points(depth_mm)
+    spread = float(five.max() - five.min())
+    over = bool(five.max() > HIGH_MM)
     failed = over or thrown or touched
-    slope, misfit = plane_fit(depth_mm)
-    some = bool(grid.max() >= GROUND_MM)
-    every = bool(grid.min() >= GROUND_MM and edge.min() >= GROUND_MM and slope <= PLANE_DEG and misfit <= SPREAD_MM)
-    line = bool(every and quad.min() >= LOW_MM and quad.max() <= HIGH_MM and quad.max() - quad.min() <= SPREAD_MM)
+    some = bool(five.max() >= GROUND_MM)
+    every = bool(five.min() >= GROUND_MM and spread <= SPREAD_MM)
+    line = bool(every and five.min() >= LOW_MM and five.max() <= HIGH_MM)
     done = bool(line and on_rest and clear and still_done)
     reached = {"ground": some, "plane": every, "line": line, "done": done}
     return LADDER.score(reached, failed), reached, failed
@@ -249,6 +257,12 @@ class Trial:
         self.rep = {}
         if env is not None:
             self._show(env, LINE_STEPS - 1)
+            import torch
+
+            for side in ("left", "right"):  # each finger's force capped at 40 N, Robocurve's figure for the YAM (the harness allows 50)
+                robot = env.unwrapped.scene[f"{side}_robot"]
+                ids = robot.find_joints(["joint7", "joint8"])[0]
+                robot.write_joint_effort_limit_to_sim(torch.full((1, len(ids)), FINGER_N_MAX, device=robot.device), joint_ids=ids)
 
     def _show(self, env, k: int) -> None:
         for j in range(LINE_STEPS):
@@ -298,24 +312,24 @@ class Trial:
         self.touched.trip(bool(((np.hypot(trel[:, 0], trel[:, 1]) <= PLATEN_R + 0.01) & (tips[:, 2] < paper_z - TIP_BELOW)).any()))
         near_platen = math.hypot(*(mount.pos[:2] - np.array(PLATEN_XY))) <= BOWL_RIM
         dx0, dy0 = np.abs(mount.pos[:2] - np.array(REST_XY))
-        clear0 = gk.hands_clear(tips, gk.along(mount, (0, 0, 0), (0, 0, MOUNT_H), 7), CLEAR_M, radius=MOUNT_R)
+        clear0 = gk.hands_clear(tips, gk.along(mount, (0, 0, 0), (0, 0, KNOB_TOP), 9), CLEAR_M, radius=CUP_R)
         self.thrown.trip(dropped(clear0, float(np.linalg.norm(mount.lin_vel)), mount.pos[2], bool(dx0 <= REST_HALF and dy0 <= REST_HALF), TOP + REST_H))
         self.thrown.trip(bool(R[2, 2] < math.cos(math.radians(45.0)) or mount.pos[2] < TOP + REST_H - 0.01
                               or (near_platen and mount.pos[2] < paper_z - 0.005)))
         dx, dy = np.abs(mount.pos[:2] - np.array(REST_XY))
         on_rest = bool(dx <= REST_HALF - MOUNT_R and dy <= REST_HALF - MOUNT_R and abs(mount.pos[2] - (TOP + REST_H)) <= 0.003 and R[2, 2] >= math.cos(math.radians(5.0)))
-        clear = gk.hands_clear(tips, gk.along(mount, (0, 0, 0), (0, 0, MOUNT_H), 7), CLEAR_M, radius=MOUNT_R)
+        clear = gk.hands_clear(tips, gk.along(mount, (0, 0, 0), (0, 0, KNOB_TOP), 9), CLEAR_M, radius=CUP_R)
         still = float(np.linalg.norm(mount.lin_vel)) < 0.01
         _, reached, _ = rungs(mm)
         self.hold.step(bool(reached["line"] and on_rest and clear and still))
         self.score, reached, failed = rungs(mm, on_rest, clear, self.hold.done, bool(self.thrown), bool(self.touched))
         self.full = self.score >= 1.0
-        quad = mm[N_GRID:N_GRID + N_QUAD]
+        five = five_points(mm)
         self.rep = {"t": round(self.n * d.DT, 2), "score": self.score, "force": round(self.force, 2), "omega": round(omega, 2),
                     "tilt": round(math.degrees(math.acos(min(1.0, R[2, 2]))), 3), "mean_mm": round(float(mm[:N_GRID].mean()), 3),
-                    "min_mm": round(float(mm[:N_GRID].min()), 3), "quad": [round(float(q), 3) for q in quad],
-                    "rim_max": round(float(mm[N_GRID + N_QUAD:].max()), 3), "line_shown": k, "on_rest": on_rest, "clear": clear,
-                    "thrown": bool(self.thrown), "touched": bool(self.touched), "gap": round(float(gap), 5), "dxy_mm": [round(float(dx*1000),1), round(float(dy*1000),1)], "dz_mm": round(float((mount.pos[2]-(TOP+REST_H))*1000),1), "r22": round(float(R[2,2]),5), "speed": round(float(np.linalg.norm(mount.lin_vel)), 3), "tips_over_face": round(float(tips[12:, 2].min() - mount.pos[2]), 4),
+                    "min_mm": round(float(mm[:N_GRID].min()), 3), "five": [round(float(q), 3) for q in five],
+                    "spread": round(float(five.max() - five.min()), 3), "line_shown": k, "on_rest": on_rest, "clear": clear,
+                    "thrown": bool(self.thrown), "touched": bool(self.touched), "gap": round(float(gap), 5), "dxy_mm": [round(float(dx*1000),1), round(float(dy*1000),1)], "dz_mm": round(float((mount.pos[2]-(TOP+REST_H))*1000),1), "r22": round(float(R[2,2]),5), "speed": round(float(np.linalg.norm(mount.lin_vel)), 3), "tips_over_face": round(float(tips[12:, 2].min() - mount.pos[2]), 4), "tips_over_flange": round(float(tips[12:, 2].min() - mount.pos[2] - FLANGE_Z1), 4),
                     "tips_over_paper": round(float(tips[:, 2].min() - paper_z), 4)}
         self.rep["hand_over_face"] = round(float(np.mean(tips[12:], axis=0)[2] - mount.pos[2]), 4)
         if os.environ.get("GRIND_TRACE") and self.n % int(os.environ.get("GRIND_TRACE")) == 0:
@@ -344,15 +358,19 @@ def stock_left_mm() -> float:
 
 # -- the scripted demo ---------------------------------------------------------------------------------------------------------------
 
-GRIP_Z = 0.033  # the TCP this far above the face: the fingers on the mount's upper part
-GRIP_YAW = 0.0  # the jaws close along y, along the paper's drag on the sweep line, so the pads' length takes the drag's tipping (kit README 24)
+TIP_BELOW_TCP = 0.0124  # the fingers' lowest point below the TCP (the harness's collision meshes)
+GRIP_Z = FLANGE_Z1 + TIP_BELOW_TCP + 0.0015  # the TCP above the face: fingertips just over the flange
+GRIP_YAW = 0.0  # the jaws close along y, across the knob's flats and along the paper's drag on the sweep line (kit README 24)
 FORCE_GOAL = 11.0  # N, under the 15 N cap
-GRIP_N = 80.0  # N a finger: the jaws' close command (set; a stiffer grip creeps less over the longer grind; at 40 N the mount slides up the fingers; the harness caps it at 50 N)
+GRIP_N = 80.0  # the jaws' close command, past the knob's flats: each finger then presses at the 40 N cap set in Trial.reset
 SWEEP_IN, SWEEP_OUT = 0.035, 0.080  # the mount's centre from the platen axis, along +x
 SWEEP_PERIOD = 4.0  # s, centre to edge and back
+TRIM_GAIN, TRIM_MAX = 0.03, 0.05  # the sweep's trim, from where the mount is seen against where it should be
 TURN_MAX = np.radians([12.0, 4.0, 2.0])
+TURN_GAIN = 0.25  # the hand's turn, per step, against the tilt seen on the mount
 RIGHT_AWAY = (0.14, -0.28, 0.20)
-CARRY_Z = PAPER_Z + 0.035 + GRIP_Z + 0.005  # the TCP while carrying: the mount's face 4 cm above the paper, 2 cm over the rim
+CARRY_Z = PAPER_Z + 0.03 + GRIP_Z  # the TCP while carrying: the mount's face 3 cm above the paper, 1 cm over the rim
+LEVEL_GAP = 0.008  # the face this far over the paper while the hand levels the mount, before it touches down
 
 
 def _rot(axis, ang):
@@ -362,7 +380,20 @@ def _rot(axis, ang):
     return np.eye(3) if n < 1e-12 or abs(ang) < 1e-12 else axis_angle_matrix(np.asarray(axis, float) / n, ang)
 
 
-def _grind(ctx, r, mode: str):
+def _level(ctx, r, p0, p1, seconds: float, rv):
+    """Go from p0 to p1 in `seconds`, turning the hand against the tilt seen on the mount (the grind's own law), so it touches down
+    square. Returns the hand's turn as a rotation vector."""
+    grip = d.down(GRIP_YAW)
+    n = max(1, int(seconds / d.DT))
+    for k in range(1, n + 1):
+        axis = ctx.state("mount").rotation()[:, 2]
+        rv = np.clip(rv + TURN_GAIN * np.cross(axis, (0.0, 0.0, 1.0)), -TURN_MAX, TURN_MAX)
+        r._solve(np.asarray(p0) + (np.asarray(p1) - np.asarray(p0)) * (k / n), _rot(rv, float(np.linalg.norm(rv))) @ grip.rot)
+        yield
+    return rv
+
+
+def _grind(ctx, r, mode: str, rv0=None):
     """Hold the mount on the paper: press to FORCE_GOAL read from the platen's spring, keep its face flat by turning the hand against the
     tilt seen on the mount, and sweep it between SWEEP_IN and SWEEP_OUT along +x, until the line reaches the face (or the mode's own stop)."""
     grip = d.down(GRIP_YAW)
@@ -372,12 +403,13 @@ def _grind(ctx, r, mode: str):
     c0 = ik.tcp_pose(r.q, r.base)[0]  # the command now, with any trim the servo found
     off = c0[:2] - np.array([cx + SWEEP_IN, cy])
     z = c0[2]
-    corr = np.eye(3)
-    rv = np.zeros(3)
-    goal = {"light": 8.0}.get(mode, FORCE_GOAL)
-    tilt_goal = 3.0 if mode == "tilted" else 0.0
+    rv = np.zeros(3) if rv0 is None else np.asarray(rv0, float)
+    corr = _rot(rv, float(np.linalg.norm(rv)))
+    trim = np.zeros(2)  # the soft arm sags back and the drag pushes the mount along +y: the hand aims off by what the mount shows
+    goal = {"light": 5.0}.get(mode, FORCE_GOAL)
+    tilt_goal = 3.0 if mode in ("tilted", "oneside") else 0.0
     t, worst = 0.0, 0.0
-    limit = {"light": 75.0, "over": 270.0}.get(mode, 270.0)
+    limit = {"oneside": 60.0}.get(mode, 270.0)
     x = cx + SWEEP_IN
     while t < limit:
         g = ctx.state("grinder")
@@ -385,18 +417,19 @@ def _grind(ctx, r, mode: str):
         z += float(np.clip(-(goal - force) * 0.00008, -0.0008, 0.0008))
         mount = ctx.state("mount")
         axis = mount.rotation()[:, 2]
-        want = _rot((0.0, 1.0, 0.0), math.radians(tilt_goal))[:, 2]  # the mode "tilted" holds the mount 3 degrees over toward +x
+        want = _rot((1.0, 0.0, 0.0), math.radians(tilt_goal))[:, 2]  # tilted and oneside hold the mount 3 degrees over about x, across the jaws, where the pads hold it rigidly (about the jaws' own axis the knob pivots in the pinch and the face settles flat)
         err = np.cross(axis, want)
-        rv = rv + 0.25 * err  # the hand's turn, as a rotation vector, follows the tilt seen on the mount
+        rv = rv + TURN_GAIN * err  # the hand's turn, as a rotation vector, follows the tilt seen on the mount
         rv = np.clip(rv, -TURN_MAX, TURN_MAX)  # at most 12 degrees about x (the drag tips the mount about x) and 4 about y (the arm's reach here)
         corr = _rot(rv, float(np.linalg.norm(rv)))
         s = 0.5 - 0.5 * math.cos(2 * math.pi * t / SWEEP_PERIOD)
         x = cx + SWEEP_IN + (SWEEP_OUT - SWEEP_IN) * s
-        mm, deg = r._solve(np.array([x + off[0], cy + off[1], z]), corr @ grip.rot)
+        trim = np.clip(trim + TRIM_GAIN * (np.array([x, cy]) - mount.pos[:2]), -TRIM_MAX, TRIM_MAX)
+        mm, deg = r._solve(np.array([x + off[0] + trim[0], cy + off[1] + trim[1], z]), corr @ grip.rot)
         worst = max(worst, mm)
         yield
         t += d.DT
-        if mode not in ("over", "light") and stock_left_mm() <= 0.0:
+        if mode not in ("over", "light", "oneside") and stock_left_mm() <= 0.0:
             break
     # ease off: still on the paper, the push let go and the hand's turn unwound together over 1.5 s, so the mount comes off square
     z_free = c0[2]
@@ -405,18 +438,18 @@ def _grind(ctx, r, mode: str):
     z0, n_ease = z, int(1.5 / d.DT)
     for k in range(1, n_ease + 1):
         u = k / n_ease
-        r._solve(np.array([x + off[0], cy + off[1], z0 + (z_free - z0) * u]), _rot(corr_axis, corr_ang * (1.0 - u)) @ grip.rot)
+        r._solve(np.array([x + off[0] + trim[0], cy + off[1] + trim[1], z0 + (z_free - z0) * u]), _rot(corr_axis, corr_ang * (1.0 - u)) @ grip.rot)
         yield
     r.grip = grip
     ang = math.degrees(math.acos(max(-1.0, min(1.0, (np.trace(corr) - 1.0) / 2.0))))
-    print(f"[demo] grind ended at t {t:.1f} s, push {force:.1f} N, line {stock_left_mm():.1f} mm, hand turned {ang:.1f} deg, worst IK {worst:.1f} mm", flush=True)
+    print(f"[demo] grind ended at t {t:.1f} s, push {force:.1f} N, line {stock_left_mm():.1f} mm, hand turned {ang:.1f} deg, trim {np.round(trim * 1000, 1)} mm, worst IK {worst:.1f} mm", flush=True)
 
 
 def demo_script(ctx):
-    """Modes: full; none, the arms wait; tilted, held 3 degrees over (a facet: 0); light, an 8 N push lifted after 75 s (not in the README table);
-    over, no stop at the line (0); leave, ground to the line and let go on the turning paper (0: the platen flings the mount off);
-    keep, ground to the line, lifted off and held in the air, never set back (0.75); hover, held just above the paper (0)."""
-    modes = ("full", "none", "tilted", "light", "over", "leave", "keep", "hover")
+    """Modes: full; none, the arms wait; tilted, held 3 degrees over to the line (a facet); oneside, held 3 degrees over for 60 s (one side
+    ground); light, a 5 N push for 270 s; over, no stop at the line; leave, ground to the line and let go on the turning paper (the platen
+    flings the mount off); keep, ground to the line, lifted off and held in the air, never set back; hover, held just above the paper."""
+    modes = ("full", "none", "tilted", "oneside", "light", "over", "leave", "keep", "hover")
     if ctx.mode not in modes:
         raise ValueError(f"unknown mode {ctx.mode!r}")
     r = ctx.right
@@ -425,7 +458,7 @@ def demo_script(ctx):
         return
     grip = d.down(GRIP_YAW)
     paper = TOP + PAPER_Z
-    yield from r.pick("mount", GRIP_Z, width=2 * MOUNT_R, grip=grip, above=0.04, lift=CARRY_Z - (REST_H + GRIP_Z), force=GRIP_N, t=3.0)  # straight up, above the bowl's rim
+    yield from r.pick("mount", GRIP_Z, width=KNOB[1], grip=grip, above=0.04, lift=CARRY_Z - (REST_H + GRIP_Z), force=GRIP_N, t=3.0)  # by the knob's flats; straight up, above the bowl's rim
     start = np.array([PLATEN_XY[0] + SWEEP_IN, PLATEN_XY[1], paper + GRIP_Z])
     yield from r.move(np.array([start[0], start[1], TOP + CARRY_Z]), label="over the platen")
     yield from r.servo(np.array([start[0], start[1], TOP + CARRY_Z]), timeout=1.0, label="over the platen")
@@ -433,8 +466,11 @@ def demo_script(ctx):
         yield from r.move(start + [0.0, 0.0, 0.004], t=1.0, label="hover")
         yield from r.wait(30.0)
         return
-    yield from r.move(start, t=1.0, label="down to the paper")
-    yield from _grind(ctx, r, ctx.mode)
+    hover = start + [0.0, 0.0, LEVEL_GAP]
+    yield from r.move(hover, t=1.0, label="down near the paper")
+    rv = yield from _level(ctx, r, hover, hover, 1.5, np.zeros(3))  # level by what the mount shows, just clear of the paper
+    rv = yield from _level(ctx, r, hover, start, 1.0, rv)  # and touch down square
+    yield from _grind(ctx, r, ctx.mode, rv)
     m_at = ctx.pos("mount")
     up = np.array([m_at[0], m_at[1], paper + GRIP_Z + 0.04])  # straight up
     yield from r.move(up, grip=grip, t=0.8, label="lift off the paper")
@@ -448,7 +484,7 @@ def demo_script(ctx):
         yield from r.wait(2.0)
         return
     yield from r.move(np.array([up[0], up[1], TOP + CARRY_Z]), t=0.6, label="up over the rim")
-    slip = ctx.pos("mount")[:2] - r.at()[:2]  # where the mount sits in the grip now (it creeps and slips under the push): the hand aims so the mount, not the hand, lands on the rest
+    slip = ctx.pos("mount")[:2] - r.at()[:2]  # where the mount sits in the grip now: the hand aims so the mount, not the hand, lands on the rest
     aim = np.array(REST_XY) - slip
     over_rest = np.array([aim[0], aim[1], TOP + CARRY_Z])
     yield from r.move(over_rest, label="carry to the rest")
