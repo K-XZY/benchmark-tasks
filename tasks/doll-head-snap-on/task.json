@@ -1,0 +1,21 @@
+{
+  "title": "Put a Ken doll's head back on: hold the body in one hand and push the head onto its neck ball until it snaps",
+  "category": "Societal relatability",
+  "keywords": [
+    "fashion doll",
+    "Ken",
+    "snap fit",
+    "ball joint",
+    "blind alignment",
+    "bimanual"
+  ],
+  "instruction": "Put the doll's head back on its neck.",
+  "context": "Most people who have owned a fashion doll know its head pops off. To put it back, people hold the body in one hand and push the head onto the neck with the other, by feel: the neck hole is inside the head, so it goes out of sight over the post and has to find the 7 mm ball within about 1.5 mm before a firm push, about 8 N, snaps the hole's lip over the ball. Off centre or crooked, the rim lands on the side of the ball and the head tilts instead of going on; pushed with the body left lying loose, the light doll slides away from the push. Here a Ken Fashionistas doll, about 30 cm tall, lies face up on the bench with its head on its side beside it.",
+  "setup": "Centimetres from the midpoint between the arm bases: x forward, y to the robot's left, heights above the bench top. (1) A Barbie Fashionistas Ken #227 doll with sculpted hair (listed about 12 in, 30 cm tall), its head off. The body, hard plastic with vinyl arms, 26.5 cm from the neck to the feet and 90 g (estimates), lies face up along y, feet toward +y, its centre line at x = 34. Shoulders 52 mm across and 22 mm deep, chest 34 mm, hips 30 mm across and 20 mm deep, centred at y = +14.3 (estimates). Its neck post points to -y along the body's centre line, 1.1 cm above the bench: a 5 mm stem and a 7 mm ball, 9 mm long, its tip at (34, -0.1) (estimates). (2) The head, vinyl with sculpted hair, 40 mm crown to chin, 30 mm ear to ear, 34 mm front to back, 12 g (estimates), lies on its side, one ear down, its neck hole at (28, -16), 1.1 cm above the bench, facing +x, away from the post, crown toward -x. The hole is 5 mm across with a 2 mm lip (estimates); the lip passes the ball at about 8 N along the post and then holds the head on (estimates). Frictions: doll and head on the bench 0.5 (estimates). Reset: pop the head off and lay body and head on their tape marks. Both arms start at their ready pose, grippers open. Barbie and Ken are trademarks of Mattel, named for identification only.",
+  "scoring": "Judged once both grippers are clear of the doll (4.6 cm from the head's axis, 5.6 cm from the body's) and both parts have been still for 1 s. 1.0: the head snapped on (pushed fully onto the ball, within 2 mm and 14 degrees of the post's axis, by the hand holding it at 8 N or more along the neck for 3 control steps), and it stays on when the scorer then pulls it 3 N away from the body along the neck for 1 s. The body may lie at any angle and the face may point any way. 0.3: the hole on the ball at any depth, within 2 mm of the post's axis and 20 degrees, not snapped. Otherwise 0, and 0 if a part falls off the bench. Real trial: with a 200 g clip on the feet (about 3 N with the body), lift the doll 30 cm by its head alone for 5 s: a snapped head keeps the body. A head only resting on the ball lifts off. That test is the same rule as the 3 N pull above. A head resting on the post that lifts off scores 0.3.",
+  "run_limit": "2,400 steps (120 s at 20 Hz), about 2.8 times the 42.4 s scripted demo",
+  "reset_notes": "Body face up and head on its side on their tape marks, the head's neck hole facing away from the post. No seed changes the scene.",
+  "fidelity": "Rigid bodies on GPU. Height is the listed 12 in; other sizes, masses, the 8 N snap and frictions are estimates from listing photos (Mattel publishes none). The real 5 mm hole stretches over the ball; here a 7.5 mm bore with a lead-in takes the 7 mm ball, and the snap is a rule: fully on while the holding hand pushes 8 N along the neck (from its joint springs). A 4 N code force then holds the head, so the scorer's 3 N pull checks the snap held, not the lip. The demo reads object poses.",
+  "scores": "Dream-1 run: 0; demo: 1.0",
+  "media": "M-88NUJQ"
+}
