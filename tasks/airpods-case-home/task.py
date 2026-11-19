@@ -308,10 +308,9 @@ class Trial:
         clear = bool(np.linalg.norm(np.maximum(q, 0.0), axis=1).min() >= 0.03)
         still = all(np.linalg.norm(x.lin_vel) < 0.005 and np.linalg.norm(x.ang_vel) < 0.2 for x in (case, *buds.values()))
         self.held = self.held + 1 if (clear and still) else 0
-        if self.held >= HOLD_STEPS:
-            self.score = tier
-        if self.dead:
-            self.score = 0.0
+        # Judged on the state at the end: the tier of this step, once the hands have been clear and everything still for the last HOLD_STEPS. Nothing is carried over:
+        # a seated bud pulled out, a case moved, or hands back at the case drops the score at once. Only a failure (dead: tipped past 20 degrees, a bud off the bench) latches.
+        self.score = 0.0 if (self.dead or self.held < HOLD_STEPS) else tier
         self.full = bool(self.held >= HOLD_STEPS and tier == 1.0)
         self.n += 1
         self.last = dict(seated=seated, proud_mm={n: round(v * 1000, 2) for n, v in pr.items()}, lid_deg=round(lid_deg, 1), shut=shut, tilt=round(tip, 1), dead=self.dead, where=where, tier=tier, clear=clear,
@@ -350,9 +349,11 @@ def _case_pos(ctx):
 def demo_script(ctx):
     """Modes: full. none: the arms wait. left_only: the left hand does everything, the case unheld. swap: the right bud goes in the left bud's well.
     lid_only: the lid is shut with no buds. one_bud: one bud seated, the other left on the bench, the lid shut. proud: the second bud let go 12 mm up, outside the magnet's reach.
+    remove_after: both buds seated and the case let go, the hands clear for 2.5 s (the score reads 0.5), then the left hand pulls the right bud out and sets it on the bench: 0.25.
+    case_moved: both buds seated and the case let go, the hands clear for 2.5 s (0.5), then the right hand pushes the case 6 cm along the bench: 0.
     Debug: hold (the holding hand only), one (one bud only), lid (the lid only, no buds)."""
     mode = ctx.mode
-    if mode not in ("full", "none", "left_only", "swap", "lid_only", "one_bud", "proud", "hold", "one", "lid", "one_free", "one_l"):
+    if mode not in ("full", "none", "left_only", "swap", "lid_only", "one_bud", "proud", "hold", "one", "lid", "one_free", "one_l", "remove_after", "case_moved"):
         raise ValueError(f"unknown mode {mode!r}")
     L, R = ctx.left, ctx.right
     if mode == "none":
@@ -362,9 +363,7 @@ def demo_script(ctx):
     # the right hand holds the case low at its two ends, fingers level pointing +x, jaws closing along y
     if mode not in ("left_only", "one_free"):
         hold = np.array([c[0], c[1] - HY + HOLD_DY, TOP + CASE_TCP_Z])
-        yield from R.move(hold + [0.0, -0.06, 0.04], grip=d.tilted(60, 90), finger=d.FINGER_OPEN)
-        yield from R.move(hold, t=1.2)
-        yield from R.close(2 * HX, GRIP_N)
+        yield from _hold_case(R, hold)
     if mode == "hold":
         yield from L.wait(3.0)
         print(f"[ap] hold {TRIAL.last}", flush=True)
@@ -377,13 +376,68 @@ def demo_script(ctx):
         yield from L.wait(1.0)
         print(f"[ap] end {TRIAL.last}", flush=True)
         return
+    if mode in ("remove_after", "case_moved"):
+        yield from _let_go_case(R)
+        yield from L.wait(2.5)
+        print(f"[ap] both seated, hands clear 2.5 s: score {TRIAL.score} {TRIAL.last}", flush=True)
+        if mode == "remove_after":
+            yield from _hold_case(R, hold)  # the hand comes back to steady the case: a bud pulled from its magnet drags a free case along
+            yield from _pull_bud(ctx, L, "bud_r")
+            yield from _let_go_case(R)
+        else:
+            yield from _shove_case(ctx, R, hold)
+        yield from L.wait(3.0)
+        print(f"[ap] end: score {TRIAL.score} {TRIAL.last}", flush=True)
+        return
     yield from _push_lid(ctx, L)
     if mode != "left_only":
-        yield from R.close(0.034, 0.5, label="let go")  # 7 mm clear of each face, then out the way the fingers came in
-        yield from R.move(R.at() + [0.0, -0.05, 0.03], t=1.0)
-        yield from R.move(R.at() + [0.0, -0.02, 0.06], t=0.8)
+        yield from _let_go_case(R)
     yield from L.wait(2.5)
     print(f"[ap] end {TRIAL.last}", flush=True)
+
+
+def _hold_case(R, hold):
+    yield from R.move(hold + [0.0, -0.06, 0.04], grip=d.tilted(60, 90), finger=d.FINGER_OPEN)
+    yield from R.move(hold, t=1.2)
+    yield from R.close(2 * HX, GRIP_N)
+
+
+def _let_go_case(R):
+    yield from R.close(0.034, 0.5, label="let go")  # 7 mm clear of each face, then out the way the fingers came in
+    yield from R.move(R.at() + [0.0, -0.05, 0.03], t=1.0)
+    yield from R.move(R.at() + [0.0, -0.02, 0.06], t=0.8)
+
+
+GRIP_OFF = {}  # per bud: the hand's TCP from the bud's origin at the moment it let go
+
+
+def _pull_bud(ctx, L, name):
+    """Take a seated bud out again: back to the grip it was let go in, close on its head, lift it out against the well's magnet and set it down on the bench."""
+    off = GRIP_OFF[name]
+    up = np.array([0.0, 0.0, 0.05])
+    yield from L.move(ctx.pos(name) + off + np.array([0.0, 0.0, 0.10]), t=2.0, label="high over seated bud")
+    yield from L.close(0.028, 0.5, label="jaws as at the release")  # the width it let go at: open wider, the far finger would land on the other head
+    yield from L.move(ctx.pos(name) + off + up, t=1.0, label="over seated bud")
+    yield from L.servo(lambda t: ctx.pos(name) + off + up, timeout=1.0, tol=0.0006, label="over seated bud")
+    yield from L.move(ctx.pos(name) + off, t=1.0, label="down to the head")
+    yield from L.servo(lambda t: ctx.pos(name) + off, timeout=1.0, tol=0.0006, label="down to the head")
+    yield from L.close(0.0218, GRIP_N, label="grip the seated bud")
+    yield from L.move(L.at() + np.array([0.0, 0.0, 0.04]), t=1.5, label="pull out")
+    print(f"[ap] {name} pulled: {TRIAL.last}", flush=True)
+    yield from L.move(np.array([0.25, ctx.pos("case")[1] - 0.01, TOP + STEM_L + 0.02]) + off, t=2.0, label="over the bench")
+    yield from L.open(label="set down")
+    yield from L.wait(0.5)
+    yield from L.move(L.at() + np.array([-0.05, 0.0, 0.08]), t=1.0, label="away")
+
+
+def _shove_case(ctx, R, hold):
+    """Push the case 6 cm along the bench (+y), from its -y end, with the closed fingers."""
+    start = hold + np.array([0.0, -0.045, 0.0])
+    yield from R.move(start + np.array([0.0, 0.0, 0.05]), finger=d.FINGER_CLOSED, t=1.5, label="back to the case")
+    yield from R.move(start, t=0.8)
+    yield from R.move(hold + np.array([0.0, 0.07, 0.0]), t=3.0, label="shove")
+    yield from R.move(R.at() + np.array([0.0, -0.03, 0.06]), t=1.0, label="off")
+    yield from R.move(R.at() + np.array([0.0, -0.06, 0.0]), t=1.0, label="away")
 
 
 PICK_DZ = float(os.environ.get("AP_PICKDZ", "0.004"))  # TCP height over the lying head's middle
@@ -457,6 +511,7 @@ def _seat_bud(ctx, L, name, wrong=False, rel=None):
     print(f"[ap] {name} lowered: tip-goal {np.round((_tip(ctx, name) - goal(99.0)) * 1000, 1)} mm, hand-command {np.round(lag, 1)} mm, {TRIAL.last}", flush=True)
     yield from L.close(0.028, 0.5, label="release")  # open only 3 mm a side: the other bud's head stands 3 mm beyond the outer finger
     yield from L.wait(0.8)
+    GRIP_OFF[name] = L.tcp() - ctx.pos(name)
     print(f"[ap] {name} released: {TRIAL.last}", flush=True)
     yield from L.move(L.at() + np.array([-0.05, 0.0, 0.0]), t=1.0, label="back")
     yield from L.move(L.at() + np.array([0.0, 0.0, 0.07]), t=0.8, label="up")
@@ -501,3 +556,17 @@ def _push_lid(ctx, L):
     yield from L.wait(0.4)
     yield from L.move(L.at() + np.array([0.0, 0.0, 0.06]), t=0.8, label="off the lid")
     yield from L.move(L.at() + np.array([-0.06, 0.0, 0.0]), t=0.8, label="away")
+
+
+def size_check() -> None:
+    """Print the scene's key sizes against the published ones (Apple's), in mm and g. Run: python task.py --sizes (no simulator is started)."""
+    rows = [("case depth (x)", 2 * HX * 1e3, 21.7), ("case width (y)", 2 * HY * 1e3, 60.6), ("case height, lid shut", H_TOT * 1e3, 45.2), ("case mass, g", (M_CASE + M_LID) * 1e3, 50.8),
+            ("bud length (head + stem)", (HEAD_H + STEM_L) * 1e3, 30.9), ("bud head width (y)", 2 * HEAD_B * 1e3, 21.8), ("bud head depth (x), ear tip not modelled", 2 * HEAD_A * 1e3, 24.0),
+            ("bud stem width (x)", STEM_X * 1e3, 5.7), ("bud stem length", STEM_L * 1e3, 23.3), ("bud mass, g", BUD_M * 1e3, 5.3), ("lid open, degrees", OPEN_DEG, 115.0)]
+    print(f"{'part':44s} {'scene':>8s} {'published':>10s}")
+    for name, got, want in rows:
+        print(f"{name:44s} {got:8.1f} {want:10.1f}")
+
+
+if __name__ == "__main__" and "--sizes" in sys.argv:
+    size_check()
