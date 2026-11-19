@@ -14,7 +14,8 @@ Removal is a rule (a simulator can't remove material): Preston's law with a thre
   - Tuned to the real hand rate of about 0.1 mm per minute: a flat face loses 0.3 mm in about 120 s under 15 N, in about 190 s under 11 N; under 5 N little (threshold 4.5 kPa, about 3.6 N over the face).
 The mount's collider keeps its full length; the removed depth is kept in the height map. The scribed line drawn on the mount's side moves
 down as the mean stock left shrinks (0.05 mm steps), as the face rises to the line on a real mount.
-Scored at five marked points, as a real trial measures them before and after: four on the circle 2 mm in from the rim, and the centre.
+Scored as a real trial measures it, before and after: the removal at 24 marked stops every 15 degrees round the circle 2 mm in from the rim (the
+simulation reads 72, every 5 degrees, so no gap between stops hides a dip), and at the centre. Any of them over the cap fails the trial.
 
     python demokit.py task.py OUT --no-record --mode full,none,tilted,oneside,light,over,leave,keep,hover
     python demokit.py task.py OUT                                      final film
@@ -76,7 +77,9 @@ P_THRESH = 4500.0  # Pa: below this the grains rub and do not cut (about 3.6 N o
 V_NOMINAL = 0.9  # m/s, a typical speed over the paper while sweeping 3.5 to 8 cm out
 K_PRESTON = 0.0025e-3 / ((15.0 / FACE_A - P_THRESH) * V_NOMINAL)  # 1/Pa: 0.15 mm/min at 15 N, 0.1 mm/min at 11 N
 GROUND_MM = 0.05  # a point counts as ground once this much is gone
-RING_MM = 14.0  # the four edge points: on the circle 2 mm in from the rim, at 0, 90, 180 and 270 degrees; the fifth is the centre
+RING_MM = 14.0  # the ring: the circle 2 mm in from the rim, read at RING_N stops from the index line scribed down the mount's side; the centre is read too
+RING_N = 72  # the simulation reads every 5 degrees (the real trial's 24 stops every 15 degrees are every third of these)
+INDEX_DEG = float(os.environ.get("GRIND_INDEX_DEG", "0"))  # where the index line sits round the mount: 0 in the demo; the lazy-route run 'spot' sets 15
 V_DROP = 0.3  # m/s: a mount this fast with no hand near it has been dropped or thrown
 F_MAX = 25.0  # N: a push beyond this is not a hand pressing a mount (machine heads load 18 to 27 N)
 CONTACT_GAP = 0.0015  # m: the mount's lowest point this close to the paper is touching it (the paper and the gripper's grip give a little)
@@ -87,18 +90,19 @@ STILL_STEPS = 20  # 1 s at 20 Hz
 
 
 def _grid():
-    """Face points in the mount's frame (mm): a 2 mm grid over the face (the contact model), then the five scored points."""
+    """Face points in the mount's frame (mm): a 2 mm grid over the face (the contact model), then the scored points (the ring and the centre)."""
     g = np.arange(-15.0, 16.0, GRID_MM)
     uu, vv = np.meshgrid(g, g)
     keep = uu ** 2 + vv ** 2 <= (MOUNT_R * 1000) ** 2
     grid = np.c_[uu[keep], vv[keep]]
-    five = np.array([[RING_MM, 0.0], [0.0, RING_MM], [-RING_MM, 0.0], [0.0, -RING_MM], [0.0, 0.0]])
-    return grid, five
+    ang = np.radians(INDEX_DEG + np.arange(RING_N) * 360.0 / RING_N)
+    scored = np.vstack([np.c_[RING_MM * np.cos(ang), RING_MM * np.sin(ang)], [[0.0, 0.0]]])  # the ring, then the centre
+    return grid, scored
 
 
-GRID, FIVE = _grid()
-POINTS = np.vstack([GRID, FIVE]) / 1000.0  # metres, mount frame
-N_GRID, N_FIVE = len(GRID), len(FIVE)
+GRID, SCORED = _grid()
+POINTS = np.vstack([GRID, SCORED]) / 1000.0  # metres, mount frame
+N_GRID, N_SCORED = len(GRID), len(SCORED)  # the last scored point is the centre
 AREA = np.r_[np.full(N_GRID, (GRID_MM / 1000) ** 2), np.zeros(len(POINTS) - N_GRID)]
 LINE_STEPS = 7  # lines drawn at 0.30, 0.25, ... 0.0 mm above the face; one shown at a time
 
@@ -218,18 +222,18 @@ def dropped(clear, speed, z, over_rest, rest_z):
     return bool(clear and (speed > V_DROP or (z > rest_z + 0.01 and not over_rest)))
 
 
-def five_points(depth_mm):
-    """Removal (mm) at the five scored points: the four 2 mm in from the rim, then the centre."""
-    return np.asarray(depth_mm)[N_GRID:N_GRID + N_FIVE]
+def scored_points(depth_mm):
+    """Removal (mm) at the scored points: the 72 ring stops 2 mm in from the rim (every 5 degrees from the index line), then the centre."""
+    return np.asarray(depth_mm)[N_GRID:N_GRID + N_SCORED]
 
 
-def rungs(depth_mm, on_rest=False, clear=False, still_done=False, thrown=False, touched=False):
-    """The scoring text's table from the removal at the five points (mm, read from `depth_mm` in POINTS order) and the end-state flags.
+def rungs(depth_mm, on_rest=False, clear=False, still_done=False, thrown=False, touched=False, was_over=False):
+    """The scoring text's table from the removal round the ring and at the centre (mm, read from `depth_mm` in POINTS order) and the end-state flags.
     Returns (score, reached, failed)."""
-    five = five_points(depth_mm)
+    five = scored_points(depth_mm)  # every ring stop and the centre
     spread = float(five.max() - five.min())
-    over = bool(five.max() > HIGH_MM)
-    failed = over or thrown or touched
+    over = bool(five.max() > HIGH_MM)  # overgrinding anywhere on the ring or at the centre
+    failed = over or was_over or thrown or touched  # a failure stays failed
     some = bool(five.max() >= GROUND_MM)
     every = bool(five.min() >= GROUND_MM and spread <= SPREAD_MM)
     line = bool(every and five.min() >= LOW_MM and five.max() <= HIGH_MM)
@@ -250,7 +254,7 @@ class Trial:
         self.off_n = 0
         self.force = 0.0
         self.peak_force = 0.0
-        self.thrown, self.touched = gk.Latch(), gk.Latch()
+        self.thrown, self.touched, self.over = gk.Latch(), gk.Latch(), gk.Latch()
         self.hold = gk.EndHold(STILL_STEPS)
         self.shown = LINE_STEPS - 1
         self.score, self.full = 0.0, False
@@ -322,16 +326,18 @@ class Trial:
         still = float(np.linalg.norm(mount.lin_vel)) < 0.01
         _, reached, _ = rungs(mm)
         self.hold.step(bool(reached["line"] and on_rest and clear and still))
-        self.score, reached, failed = rungs(mm, on_rest, clear, self.hold.done, bool(self.thrown), bool(self.touched))
+        self.over.trip(bool(scored_points(mm).max() > HIGH_MM))  # past the cap anywhere on the ring or at the centre: failed for good
+        self.score, reached, failed = rungs(mm, on_rest, clear, self.hold.done, bool(self.thrown), bool(self.touched), bool(self.over))
         self.full = self.score >= 1.0
-        five = five_points(mm)
+        five = scored_points(mm)
         self.rep = {"t": round(self.n * d.DT, 2), "score": self.score, "force": round(self.force, 2), "omega": round(omega, 2),
                     "tilt": round(math.degrees(math.acos(min(1.0, R[2, 2]))), 3), "mean_mm": round(float(mm[:N_GRID].mean()), 3),
-                    "min_mm": round(float(mm[:N_GRID].min()), 3), "five": [round(float(q), 3) for q in five],
+                    "min_mm": round(float(mm[:N_GRID].min()), 3), "ring_min": round(float(five[:-1].min()), 3), "ring_max": round(float(five[:-1].max()), 3), "ring_at_max_deg": round(float(np.argmax(five[:-1])) * 360.0 / RING_N, 1), "centre": round(float(five[-1]), 3), "quad": [round(float(five[k]), 3) for k in range(0, RING_N, RING_N // 4)],
                     "spread": round(float(five.max() - five.min()), 3), "line_shown": k, "on_rest": on_rest, "clear": clear,
                     "thrown": bool(self.thrown), "touched": bool(self.touched), "gap": round(float(gap), 5), "dxy_mm": [round(float(dx*1000),1), round(float(dy*1000),1)], "dz_mm": round(float((mount.pos[2]-(TOP+REST_H))*1000),1), "r22": round(float(R[2,2]),5), "speed": round(float(np.linalg.norm(mount.lin_vel)), 3), "tips_over_face": round(float(tips[12:, 2].min() - mount.pos[2]), 4), "tips_over_flange": round(float(tips[12:, 2].min() - mount.pos[2] - FLANGE_Z1), 4),
                     "tips_over_paper": round(float(tips[:, 2].min() - paper_z), 4)}
         self.rep["hand_over_face"] = round(float(np.mean(tips[12:], axis=0)[2] - mount.pos[2]), 4)
+        self.rep["ang_vel"] = [round(float(w), 2) for w in mount.ang_vel]
         if os.environ.get("GRIND_TRACE") and self.n % int(os.environ.get("GRIND_TRACE")) == 0:
             print(f"[grind] {self.rep}", flush=True)
 
@@ -370,7 +376,11 @@ TURN_MAX = np.radians([12.0, 4.0, 2.0])
 TURN_GAIN = 0.25  # the hand's turn, per step, against the tilt seen on the mount
 RIGHT_AWAY = (0.14, -0.28, 0.20)
 CARRY_Z = PAPER_Z + 0.03 + GRIP_Z  # the TCP while carrying: the mount's face 3 cm above the paper, 1 cm over the rim
+SPOT_OVER_MM = 0.002  # the spot mode stops when the highest ring stop is this far over the cap
 LEVEL_GAP = 0.008  # the face this far over the paper while the hand levels the mount, before it touches down
+SET_GAP = 0.012  # the face about this far over the rest before the slow, read set-down
+SET_SPEED = 0.008  # m/s: the set-down's descent
+SEATED_MM = 0.5  # the mount stands on the rest: its face within this of the rest's top, or pushed this far up the grip
 
 
 def _rot(axis, ang):
@@ -393,6 +403,39 @@ def _level(ctx, r, p0, p1, seconds: float, rv):
     return rv
 
 
+def _set_down(ctx, r, timeout: float = 4.0):
+    """Lower the held mount onto its rest by feedback: down at SET_SPEED until it reads seated (its face within SEATED_MM of the rest's top, or
+    pushed SEATED_MM up the grip, the hand's reading of contact), then stop the hand where it really is, so it lets go of a mount standing on
+    the rest, not one pressed into it, and hold it there at least 0.5 s (at most 1 s) until it reads still and flat."""
+    from yam_arena import ik
+
+    rot = d.down(GRIP_YAW).rot
+    rest_z = TOP + REST_H
+    c = ik.tcp_pose(r.q, r.base)[0]
+    hang = float(r.tcp()[2] - ctx.pos("mount")[2])  # how far the face hangs below the hand, free in the air
+    seated, n = 0, int(timeout / d.DT)
+    for k in range(n):
+        mz = float(ctx.pos("mount")[2])
+        if mz - rest_z <= SEATED_MM / 1000 or float(r.tcp()[2]) - mz < hang - SEATED_MM / 1000:
+            break
+        c = c - np.array([0.0, 0.0, SET_SPEED * d.DT])
+        r._solve(c, rot)
+        yield
+    c[2] = max(float(c[2]), float(r.tcp()[2]) - 0.0005)  # hold where the hand is, no push into the rest
+    r._solve(c, rot)
+    last = np.asarray(ctx.pos("mount"), float)
+    for k in range(int(1.0 / d.DT)):  # still and flat before letting go: it moves under 0.1 mm a step, 5 steps running
+        yield
+        mount = ctx.state("mount")
+        now = np.asarray(mount.pos, float)
+        seated = seated + 1 if float(np.linalg.norm(now - last)) < 0.0001 and mount.rotation()[2, 2] >= math.cos(math.radians(1.0)) else 0
+        last = now
+        if seated >= 5 and k >= 9:  # held on the rest at least 0.5 s
+            break
+    print(f"[demo] set down: face {1000 * (float(ctx.pos('mount')[2]) - rest_z):.1f} mm over the rest, pushed "
+          f"{1000 * (hang - float(r.tcp()[2] - ctx.pos('mount')[2])):.1f} mm up the grip, still {seated >= 5}", flush=True)
+
+
 def _grind(ctx, r, mode: str, rv0=None):
     """Hold the mount on the paper: press to FORCE_GOAL read from the platen's spring, keep its face flat by turning the hand against the
     tilt seen on the mount, and sweep it between SWEEP_IN and SWEEP_OUT along +x, until the line reaches the face (or the mode's own stop)."""
@@ -407,7 +450,7 @@ def _grind(ctx, r, mode: str, rv0=None):
     corr = _rot(rv, float(np.linalg.norm(rv)))
     trim = np.zeros(2)  # the soft arm sags back and the drag pushes the mount along +y: the hand aims off by what the mount shows
     goal = {"light": 5.0}.get(mode, FORCE_GOAL)
-    tilt_goal = 3.0 if mode in ("tilted", "oneside") else 0.0
+    tilt_goal = {"tilted": 3.0, "oneside": 3.0}.get(mode, 0.0)
     t, worst = 0.0, 0.0
     limit = {"oneside": 60.0}.get(mode, 270.0)
     x = cx + SWEEP_IN
@@ -429,7 +472,10 @@ def _grind(ctx, r, mode: str, rv0=None):
         worst = max(worst, mm)
         yield
         t += d.DT
-        if mode not in ("over", "light", "oneside") and stock_left_mm() <= 0.0:
+        if mode == "spot":  # keeps grinding until the highest ring stop is 0.002 mm over the cap, a stretch of the ring between the old four points
+            if TRIAL.rep.get("ring_max", 0.0) >= HIGH_MM + SPOT_OVER_MM:
+                break
+        elif mode not in ("over", "light", "oneside") and stock_left_mm() <= 0.0:
             break
     # ease off: still on the paper, the push let go and the hand's turn unwound together over 1.5 s, so the mount comes off square
     z_free = c0[2]
@@ -448,8 +494,9 @@ def _grind(ctx, r, mode: str, rv0=None):
 def demo_script(ctx):
     """Modes: full; none, the arms wait; tilted, held 3 degrees over to the line (a facet); oneside, held 3 degrees over for 60 s (one side
     ground); light, a 5 N push for 270 s; over, no stop at the line; leave, ground to the line and let go on the turning paper (the platen
-    flings the mount off); keep, ground to the line, lifted off and held in the air, never set back; hover, held just above the paper."""
-    modes = ("full", "none", "tilted", "oneside", "light", "over", "leave", "keep", "hover")
+    flings the mount off); keep, ground to the line, lifted off and held in the air, never set back; hover, held just above the paper; spot, held flat and ground on past the
+    line until one ring stop is 0.002 mm over the cap (run with GRIND_INDEX_DEG=15, which puts that stretch between the old four points)."""
+    modes = ("full", "none", "tilted", "oneside", "light", "over", "leave", "keep", "hover", "spot")
     if ctx.mode not in modes:
         raise ValueError(f"unknown mode {ctx.mode!r}")
     r = ctx.right
@@ -489,8 +536,9 @@ def demo_script(ctx):
     over_rest = np.array([aim[0], aim[1], TOP + CARRY_Z])
     yield from r.move(over_rest, label="carry to the rest")
     yield from r.servo(over_rest, timeout=1.0, label="carry to the rest")
-    yield from r.move(np.array([aim[0], aim[1], TOP + REST_H + GRIP_Z + 0.002]), t=1.5, label="set down")
-    yield from r.open()
-    yield from r.move(r.at() + [0.0, 0.0, 0.05], label="up")
+    yield from r.move(np.array([aim[0], aim[1], TOP + REST_H + GRIP_Z + SET_GAP]), t=1.2, label="down over the rest")
+    yield from _set_down(ctx, r)  # lowered by feedback until it stands on the rest, unloaded
+    yield from r.open(t=0.8)
+    yield from r.move(r.at() + [0.0, 0.0, 0.06], t=1.5, label="straight up")
     yield from r.move((RIGHT_AWAY[0], RIGHT_AWAY[1], TOP + RIGHT_AWAY[2]), label="clear")
     yield from r.wait(1.5)
