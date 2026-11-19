@@ -16,5 +16,6 @@
   "run_limit": "3,200 steps (2 minutes 40 seconds at 20 Hz)",
   "fidelity": "Whole box at Uline S-16934's outside size. Front and back walls start folded up, rigid with the base; dust flaps sprung shut (real: spring out). Panels are rigid, weightless plates on sprung hinges (creases are settings); no cardboard skew; no lid side flaps. Each double crease is one hinge; a tab latches 2 mm in its hole; the tuck latches the lid. Simulation scores only bench-leave and dust-flap (past 30 deg) damage; tab, fold, dent need a real trial. The demo reads the scorer's state.",
   "scores": "Dream-1 run: 0.0; demo: 1.0",
-  "reset_notes": "Nothing is random (object_jitter=0). Between real trials unhook the tabs, roll the inner panels back out, fold the lid and tuck back up in line with the back wall; replace the box after 10 trials or once an end wall no longer rests at 80 +/- 5 degrees."
+  "reset_notes": "Nothing is random (object_jitter=0). Between real trials unhook the tabs, roll the inner panels back out, fold the lid and tuck back up in line with the back wall; replace the box after 10 trials or once an end wall no longer rests at 80 +/- 5 degrees.",
+ "media": "M-AA67C5"
 }
