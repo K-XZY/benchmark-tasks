@@ -229,7 +229,7 @@ def demo_script(ctx):
         return float(ctx.state("rack").pos[2]) - TOP - ROD / 2
 
     def level_and_height(target, tol=0.004):
-        """Feedback on the observed pose, as bookcase-shelf-pins does: take out the pitch about the rack's centre, then close the height error."""
+        """Feedback on the observed pose, by taking out the pitch about the rack's centre, then close the height error."""
         for k in range(3):
             st = ctx.state("rack")
             rot = m.quat_matrix(st.quat_xyzw)
