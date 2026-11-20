@@ -1,4 +1,4 @@
-# Ticket a shirt through its sewn care label only: lift the label, pierce it with a tagging gun's needle, fire one fastener
+# Ticket a shirt through its sewn care label only: lift the label, pierce it with a tagging gun's needle, fire a fastener
 
 A child's cotton T-shirt lies flat on the table, front up, and its care label, sewn into the side seam and drawn out, lies on the front panel. A tagging gun lies on its side beside it with a price ticket on its needle and a clip of fasteners loaded. The robot lifts the label clear of the shirt with one hand, pushes the gun's needle through the label alone with the other until it pierces the cloth, squeezes the trigger to fire one fastener, draws the needle back, and lays the label down with the ticket hanging from it.
 
