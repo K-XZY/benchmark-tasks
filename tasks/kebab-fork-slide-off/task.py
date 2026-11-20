@@ -1,10 +1,11 @@
-"""Take the pieces off a vegetable kebab onto a plate with a fork: one hand holds the skewer by its bare end with its point over the plate, the other pushes the pieces off the point.
+"""Take the pieces off a vegetable kebab onto a plate with a fork: one hand holds the skewer by its bare end, the other pushes the pieces off the point with the fork; then the bare skewer is put down off the plate.
 
 Scene (station frame, metres; x forward from the midpoint between the arm bases, y to the robot's left, z up from the bench top).
-A bamboo skewer (300 x 3 mm) lies along y (point toward the right arm's base) on a wire rack (two cross bars 40 mm up), carrying four pierced vegetable pieces: from the point, a red bell pepper
-square, a red onion block, a courgette round and a button mushroom. A 26 cm dinner plate stands at the right front, a four-tine dinner fork lies on a cutlery rest at the right.
+A bamboo skewer (300 x 3 mm) lies across a 26 cm dinner plate along y (point toward the right arm's base), its four pierced vegetable pieces resting on the plate's floor: from the
+point, a red bell pepper square, a red onion block, a courgette round and a button mushroom. Its bare blunt end reaches over the rim onto the board. A stainless dinner fork
+(IKEA FOERNUFT, 190 mm) lies on the board at the front right, resting on its tines and handle end like any table fork.
 Each piece is a free rigid body on the skewer by a joint made on the live stage: locked in every direction but the slide along the stick, where a drive caps the force at the
-piece's grip on the stick (`GRIP_N`); the joint is taken off when the piece's rear face passes the point, and the piece then falls free.
+piece's grip on the stick (`GRIP_N`); the joint is taken off when the piece's rear face passes the point, and the piece then falls free onto the plate.
 
 Debug:  python demokit.py task.py OUT --no-record --mode full,none,one_arm
 Final:  python demokit.py task.py OUT
@@ -26,7 +27,8 @@ import gatekit as gk  # noqa: E402
 import mechkit as m  # noqa: E402
 
 SCENE = "station"
-INSTRUCTION = ("Take the vegetables off the kebab onto the plate with the fork. Keep the skewer where it lies, with its point over the plate, and do not touch the vegetables with your grippers.")
+INSTRUCTION = ("Take the vegetables off the kebab onto the plate with the fork: hold the skewer by its bare end and push the pieces off its point with the fork, "
+               "then put the empty skewer down on the board beside the plate. Do not touch the vegetables with your grippers.")
 SUCCESS_HOLD_S = 0.0  # the scorer holds the end state itself
 SCORE_OVER = "end"
 TOP = d.TABLE_TOP
@@ -44,9 +46,10 @@ def sw(s: float, v: float = 0.0) -> tuple:
     """A point `s` along the stick (SK_X0 at the blunt end), `v` beside it, in the station frame."""
     return (STK_X + v, STK_Y - (s - SK_C))
 
-RACK_H = 0.040  # the rack's cross bars, 40 mm up: the 30 mm pieces clear the plate's 20 mm rim
-ZS = TOP + RACK_H + SK_W / 2  # the skewer's axis on the rack
-BAR_S = (0.34, 0.40)  # the rack bars: both behind the run, so the point end overhangs the plate
+PLATE_C = np.array([0.33, -0.16])
+PLATE_R, PLATE_RIM_IN, PLATE_T, RIM_H = 0.130, 0.121, 0.008, 0.020
+ON_PLATE_R = 0.112
+ZS = TOP + PLATE_T + 0.0175 + 0.0005  # the skewer's axis: the 35 mm mushroom rests on the plate's floor
 SK_MASS = float(os.environ.get("KB_SKM", "0.010"))
 GRIP_N = float(os.environ.get("KB_GRIP", "1.0"))  # N to slide a piece along the stick (estimate)
 DAMP = 4000.0  # N s/m: the drive saturates at GRIP_N above 0.25 mm/s
@@ -60,16 +63,11 @@ for _n, _t, *_ in PIECES:
     PX[_n] = _x - _t / 2
     _x -= _t
 RUN_X0 = _x  # the run's rear face
-PLATE_C = np.array([0.38, -0.26])
-PLATE_R, PLATE_RIM_IN, PLATE_T, RIM_H = 0.130, 0.121, 0.008, 0.020
-ON_PLATE_R = 0.112
 FORK_REST = np.array([0.10, -0.10])
 FORK_YAW = float(os.environ.get("KB_YAW", "-35"))  # the fork's heading while lying and while pushing, degrees from +x (tines forward and to the left)
-REST_H = 0.012
 
 LOOKS = {
     "bamboo": m.Look(m.rgb(0.80, 0.66, 0.40), roughness=0.7),
-    "wire": m.Look(m.rgb(0.55, 0.56, 0.58), roughness=0.3, metallic=0.9),
     "pepper": m.Look(m.rgb(0.80, 0.07, 0.06), roughness=0.35),
     "onion": m.Look(m.rgb(0.55, 0.15, 0.40), roughness=0.5),
     "onion_pale": m.Look(m.rgb(0.93, 0.85, 0.88), roughness=0.5),
@@ -78,8 +76,7 @@ LOOKS = {
     "mushroom": m.Look(m.rgb(0.80, 0.68, 0.52), roughness=0.5),
     "stem": m.Look(m.rgb(0.93, 0.90, 0.82), roughness=0.5),
     "plate": m.Look(m.rgb(0.95, 0.95, 0.93), roughness=0.25),
-    "steel": m.Look(m.rgb(0.72, 0.73, 0.76), roughness=0.2, metallic=0.9),
-    "rest": m.Look(m.rgb(0.85, 0.82, 0.76), roughness=0.5),
+    "steel": m.Look(m.rgb(0.78, 0.79, 0.82), roughness=0.15, metallic=0.95),
 }
 
 
@@ -87,25 +84,7 @@ def _aim(mesh):
     return mesh.aimed("+X")
 
 
-# -- the rack, the plate, the fork's rest ----------------------------------------------------------------------------------------------------
-SG = {-1: "n", 1: "p"}
-
-
-def _rack():
-    cols, parts = [], []
-    ys = [sw(b)[1] for b in BAR_S]
-    for i, by in enumerate(ys):
-        parts.append((f"bar{i}", m.box((0.16, 0.004, 0.004), (STK_X, by, RACK_H - 0.002)), "wire"))
-        cols.append(m.col_box(f"bar{i}", (0.16, 0.004, 0.004), (STK_X, by, RACK_H - 0.002)))
-        for sx in (-1, 1):
-            parts.append((f"leg{i}{SG[sx]}", m.box((0.004, 0.004, RACK_H), (STK_X + sx * 0.078, by, RACK_H / 2)), "wire"))
-            cols.append(m.col_box(f"leg{i}{SG[sx]}", (0.004, 0.004, RACK_H), (STK_X + sx * 0.078, by, RACK_H / 2)))
-    for sx in (-1, 1):
-        parts.append((f"rail{SG[sx]}", m.box((0.004, abs(ys[0] - ys[1]) + 0.004, 0.004), (STK_X + sx * 0.078, (ys[0] + ys[1]) / 2, 0.002)), "wire"))
-        cols.append(m.col_box(f"rail{SG[sx]}", (0.004, abs(ys[0] - ys[1]) + 0.004, 0.004), (STK_X + sx * 0.078, (ys[0] + ys[1]) / 2, 0.002)))
-    return m.fixed("rack", (0.0, 0.0, TOP), parts, cols, LOOKS)
-
-
+# -- the plate ------------------------------------------------------------------------------------------------------------------------------
 def _plate():
     cols = [m.col_cylinder("floor", PLATE_R, PLATE_T, (0.0, 0.0, PLATE_T / 2))]
     parts = [("floor", m.cylinder(PLATE_R, PLATE_T, (0.0, 0.0, PLATE_T / 2), segments=64), "plate")]
@@ -118,13 +97,6 @@ def _plate():
         parts.append((f"rim{k}", box, "plate"))
         cols.append(m.col_hull(f"rim{k}", box))
     return m.fixed("plate", (PLATE_C[0], PLATE_C[1], TOP), parts, cols, LOOKS)
-
-
-def _rest():
-    """A 12 mm board under the fork's head and tines, so the handle overhangs it and the fingers can go down beside the handle."""
-    sz = (0.15, 0.10, REST_H)
-    c = FORK_REST + 0.045 * np.array([math.cos(math.radians(FORK_YAW)), math.sin(math.radians(FORK_YAW))])
-    return m.fixed("rest", (c[0], c[1], TOP), [("b", m.box(sz, (0, 0, REST_H / 2)), "rest")], [m.col_box("b", sz, (0, 0, REST_H / 2))], LOOKS, yaw_deg=FORK_YAW)
 
 
 # -- the skewer ----------------------------------------------------------------------------------------------------------------------------------
@@ -167,32 +139,51 @@ def _piece(name, t, wy, wz, mass):
     return m.free(name, (*sw(x), ZS), parts, _ringed("c", body), LOOKS, mass=mass, friction=(0.7, 0.6), torsional_patch=None, solver_iters=32, yaw_deg=SK_YAW)
 
 
-# -- the fork: a 190 mm dinner fork, four tines 2.5 mm wide on 5 mm gaps, handle 10 x 4 mm; its local x runs toward the tines, origin at the bottom of the handle's middle -------------
-F_HAND0, F_HAND1 = -0.095, -0.005  # handle
-F_HEAD1 = 0.035
-F_TIP = 0.095
+# -- the fork: a stainless dinner fork (IKEA FOERNUFT, 190 mm), four tines 2.5 mm wide on 7.5 mm centres, a 25 mm head, a neck rising 8 mm and a 3 mm handle that widens
+# from 7 mm at the neck to 16 mm at its rounded end and slopes back down to the board, so the fork lies on its tines and its handle end like any table fork.
+# Its local x runs toward the tines, origin on the board under the neck.
+F_END, F_NECK, F_SHOULDER, F_HEAD1, F_TIP = -0.100, -0.010, 0.020, 0.045, 0.090
+NECK_Z = 0.008  # the handle's underside at the neck, over the board
+F_TH_H, F_TH_T = 0.003, 0.002  # handle and head/tine thickness
 F_TINES_Y = (-0.01125, -0.00375, 0.00375, 0.01125)
-F_TH_H, F_TH_T = 0.004, 0.002  # handle and tine thickness
-FORK_MASS = 0.070
+FORK_MASS = 0.045
+GRAB_X = -0.055  # the right hand takes the handle here
+
+
+def handle_z(x: float) -> float:
+    """The handle's underside over the board at `x`: from 0 at its end up to NECK_Z at the neck."""
+    return NECK_Z * (x - F_END) / (F_NECK - F_END)
+
+
+def _sheared(mesh, x0: float, z0: float, x1: float, z1: float):
+    """The mesh lifted by a height that runs linearly from z0 at x0 to z1 at x1 (a straight bent section; a shear keeps a convex part convex)."""
+    v = mesh.v.copy()
+    v[:, 2] += z0 + (z1 - z0) * (v[:, 0] - x0) / (x1 - x0)
+    return m.Mesh(v, mesh.f)
 
 
 def _fork():
     parts, cols = [], []
-    hl = F_HAND1 - F_HAND0
-    parts.append(("handle", m.box((hl, 0.010, F_TH_H), ((F_HAND0 + F_HAND1) / 2, 0.0, F_TH_H / 2)), "steel"))
-    cols.append(m.col_box("handle", (hl, 0.010, F_TH_H), ((F_HAND0 + F_HAND1) / 2, 0.0, F_TH_H / 2)))
-    neck = m.join(m.box((0.001, 0.010, F_TH_T), (F_HAND1, 0.0, F_TH_T / 2)), m.box((0.001, 0.025, F_TH_T), (0.015, 0.0, F_TH_T / 2)))
+    hw = lambda x: 0.0035 + (0.008 - 0.0035) * (F_NECK - x) / (F_NECK - F_END + 0.006)  # half width
+    xs = [F_NECK, -0.040, -0.070, -0.088]
+    outline = [(x, -hw(x)) for x in xs] + [(-0.096, -0.0075), (F_END, -0.004), (F_END, 0.004), (-0.096, 0.0075)] + [(x, hw(x)) for x in reversed(xs)]
+    handle = _sheared(m.prism(outline[::-1], 0.0, F_TH_H), F_END, 0.0, F_NECK, NECK_Z)  # counter-clockwise
+    parts.append(("handle", handle, "steel"))
+    cols.append(m.col_hull("handle", handle))
+    neck = _sheared(m.prism([(F_NECK, -0.0035), (0.008, -0.006), (F_SHOULDER, -0.0125), (F_SHOULDER, 0.0125), (0.008, 0.006), (F_NECK, 0.0035)], 0.0, F_TH_T), F_NECK, NECK_Z, F_SHOULDER, 0.0)
     parts.append(("neck", neck, "steel"))
     cols.append(m.col_hull("neck", neck))
-    parts.append(("head", m.box((F_HEAD1 - 0.015, 0.025, F_TH_T), ((F_HEAD1 + 0.015) / 2, 0.0, F_TH_T / 2)), "steel"))
-    cols.append(m.col_box("head", (F_HEAD1 - 0.015, 0.025, F_TH_T), ((F_HEAD1 + 0.015) / 2, 0.0, F_TH_T / 2)))
+    head = m.prism([(F_SHOULDER, -0.0125), (F_HEAD1, -0.0125), (F_HEAD1, 0.0125), (F_SHOULDER, 0.0125)], 0.0, F_TH_T)
+    parts.append(("head", head, "steel"))
+    cols.append(m.col_hull("head", head))
     for i, ty in enumerate(F_TINES_Y):
-        parts.append((f"tine{i}", m.box((F_TIP - F_HEAD1, 0.0025, F_TH_T), ((F_TIP + F_HEAD1) / 2, ty, F_TH_T / 2)), "steel"))
-        cols.append(m.col_box(f"tine{i}", (F_TIP - F_HEAD1, 0.0025, F_TH_T), ((F_TIP + F_HEAD1) / 2, ty, F_TH_T / 2)))
-    return m.free("fork", (FORK_REST[0], FORK_REST[1], TOP + REST_H), parts, cols, LOOKS, mass=FORK_MASS, friction=(0.6, 0.5), torsional_patch=0.004, solver_iters=32, yaw_deg=FORK_YAW)
+        tine = m.prism([(F_HEAD1 - 0.001, ty - 0.00125), (F_TIP - 0.006, ty - 0.00125), (F_TIP, ty), (F_TIP - 0.006, ty + 0.00125), (F_HEAD1 - 0.001, ty + 0.00125)], 0.0, F_TH_T)
+        parts.append((f"tine{i}", tine, "steel"))
+        cols.append(m.col_hull(f"tine{i}", tine))
+    return m.free("fork", (FORK_REST[0], FORK_REST[1], TOP + 0.0002), parts, cols, LOOKS, mass=FORK_MASS, friction=(0.6, 0.5), torsional_patch=0.004, solver_iters=32, yaw_deg=FORK_YAW)
 
 
-OBJECTS = [_rack(), _plate(), _rest(), _skewer()] + [_piece(*p) for p in PIECES] + [_fork()]
+OBJECTS = [_plate(), _skewer()] + [_piece(*p) for p in PIECES] + [_fork()]
 
 
 # -- the pieces' joints, made on the live stage --------------------------------------------------------------------------------------------------
@@ -262,7 +253,7 @@ def release_joint(n: str) -> None:
 
 # -- the scorer ----------------------------------------------------------------------------------------------------------------------------------
 DRIFT = 0.030  # the skewer is held still while it stays this near where it lay
-DRIFT_END = 0.040
+ASIDE_Z = 0.012  # the skewer put down: every point of its axis this low over the board
 PIN_STEPS = 20  # 1 s held
 HOLD_GAP = 0.004  # held: each of the left hand's two fingers has its pad this near the skewer's bare part (to its surface)
 HOLD_OPEN = 0.006  # and the jaws are shut to this gap or less, so a hand open over the stick does not hold it
@@ -305,7 +296,16 @@ def inside_piece(name: str, st, pts, grow: float) -> bool:
 
 
 def fork_points(st) -> np.ndarray:
-    return st.to_world(np.array([(x, y, F_TH_T / 2) for x in (F_HEAD1, F_TIP) for y in (-0.0125, -0.00375, 0.00375, 0.0125)] + [(0.0, 0.0, F_TH_T / 2)]))
+    return st.to_world(np.array([(x, y, F_TH_T / 2) for x in (F_HEAD1, F_TIP) for y in (-0.0125, -0.00375, 0.00375, 0.0125)] + [(F_SHOULDER, 0.0, F_TH_T / 2)]))
+
+
+STICK_S = np.linspace(-SK_L / 2, SK_L / 2, 13)
+
+
+def skewer_aside(sk) -> bool:
+    """The bare skewer put down off the plate: every point of its axis outside the plate's rim and lying on the board."""
+    pts = sk.to_world(np.c_[STICK_S, np.zeros(13), np.zeros(13)])
+    return bool(np.all(np.linalg.norm(pts[:, :2] - PLATE_C, axis=1) > PLATE_R + 0.005) and np.all(pts[:, 2] - TOP < ASIDE_Z))
 
 
 class Trial:
@@ -321,6 +321,8 @@ class Trial:
         self.hold = 0
         self.held_now = False
         self.drift_max = 0.0
+        self.n_ok = 0
+        self.aside = False
         self.fault = gk.Latch("a piece off the stick without the fork and the held skewer, or off the plate")
         self.log = {}
         if env is not None:
@@ -392,14 +394,15 @@ class Trial:
         veg_clear = not any(inside_piece(k, ps[k], h, CLEAR) for k in NAMES for h in hands)
         n_ok = sum(1 for k in NAMES if self.good[k] and self.on_plate[k])
         self.n_ok = n_ok
-        self.hold = self.hold + 1 if (n_ok == 4 and drift < DRIFT_END and still and veg_clear and not self.touch and not self.fault) else 0
+        self.aside = skewer_aside(sk)
+        self.hold = self.hold + 1 if (n_ok == 4 and self.aside and still and veg_clear and not self.touch and not self.fault) else 0
 
     def tier(self) -> float:
         if bool(self.touch) or bool(self.fault) or self.n == 0:
             return 0.0
         if self.hold >= HOLD_STEPS:
             return 1.0
-        if self.n_ok >= 2:
+        if self.n_ok == 4:
             return 0.5
         if self.pin >= PIN_STEPS:  # held now, not latched
             return 0.25
@@ -423,6 +426,7 @@ def score(objects) -> float:
 # -- the demo ------------------------------------------------------------------------------------------------------------------------------------
 GL = d.down(-90.0)  # the left hand comes straight down on the stick, its jaws closing across it (along x)
 UD = np.array([0.0, -1.0, 0.0])  # along the stick, toward the point
+ASIDE = (-0.13, 0.12, 0.0)  # the bare skewer is drawn back along itself and toward the robot, clear of the plate
 
 
 def report(tag):
@@ -430,8 +434,11 @@ def report(tag):
 
 
 def demo_script(ctx):
-    """Modes: full; none; one_arm (the fork hand pushes, the skewer left alone); hold_only (the left hand pins the skewer, nothing else); hover (the left hand open 8 mm over the bare stick, nothing else); strip (no fork)."""
-    if ctx.mode not in ("full", "none", "one_arm", "hold_only", "strip", "hover"):
+    """Modes: full; none; one_arm (the fork hand pushes, the skewer left alone); hold_only (the left hand pins the skewer, nothing else); hover (the left hand open 8 mm over the bare
+    stick, nothing else); fingers (no fork: the right hand pinches the mushroom and strips the pieces off with its fingers); offplate (the left lifts the kebab and carries its
+    point out over the board beyond the plate, then the fork pushes the pieces off there); no_aside (full, but the bare skewer is left on the plate)."""
+    modes = ("full", "none", "one_arm", "hold_only", "hover", "fingers", "offplate", "no_aside")
+    if ctx.mode not in modes:
         raise ValueError(f"unknown mode {ctx.mode!r}")
     l, r = ctx.left, ctx.right
     SK = lambda: ctx.state("skewer")
@@ -448,7 +455,7 @@ def demo_script(ctx):
     H = np.array([math.cos(hd), math.sin(hd), 0.0])
     PIN = float(os.environ.get("KB_PIN", "0.04"))  # the pinch, this far from the blunt end
     ONE = ctx.mode == "one_arm"
-    # 1. the left hand comes down on the skewer near its blunt end and pins it
+    # 1. the left hand comes down on the skewer near its blunt end, over the board, and pins it
     g = sl(-SK_L / 2 + PIN) + [0.0, 0.0, float(os.environ.get("KB_PZ", "0"))]
     if ctx.mode == "hover":  # the left hand open, its fingertips 8 mm above the bare stick, no jaws shut
         yield from l.move(g + [0.0, 0.0, 0.10], grip=GL, finger=OPEN, t=3.0, label="L over the skewer")
@@ -457,7 +464,6 @@ def demo_script(ctx):
         report("hover")
         return
     if not ONE:
-        g = sl(-SK_L / 2 + PIN) + [0.0, 0.0, float(os.environ.get("KB_PZ", "0"))]
         yield from l.move(g + [0.0, 0.0, 0.10], grip=GL, finger=OPEN, t=3.0, label="L over the skewer")
         yield from l.servo(g + [0.0, 0.0, 0.10], timeout=1.0, label="L over")
         yield from l.move(g, t=1.5, label="L down onto it")
@@ -465,27 +471,37 @@ def demo_script(ctx):
         yield from l.close(SK_W, force=float(os.environ.get("KB_F", "40")), t=float(os.environ.get("KB_CT", "1.5")), label="L pinch")
         yield from l.wait(0.5)
         report("pinned")
-    if ctx.mode == "strip":  # no fork: the left hand drags the skewer back so the pieces catch on the rack bar and come off the point
-        yield from l.move(l.at() + np.array([0.0, 0.14, 0.0]), t=7.0, label="L drag the skewer back")
-        yield from l.wait(2.0)
-        report("strip")
-        return
     if ctx.mode == "hold_only":
         yield from l.wait(4.0)
         report("hold_only")
         return
-    # 2. the right hand takes the fork by its handle (the part overhanging its board), brings the tines up behind the run
-    grab = lambda: FK().to_world(np.array([-0.04, 0.0, F_TH_H / 2]))[0]
+    if ctx.mode == "fingers":  # no fork: the right fingers take the mushroom and draw the pieces off the point
+        gm = P("mushroom").pos + [0.0, 0.0, 0.004]
+        yield from r.move(gm + [0.0, 0.0, 0.10], grip=d.down(0.0), finger=OPEN, t=3.0, label="R over the mushroom")
+        yield from r.move(gm, t=1.5, label="R down")
+        yield from r.close(0.030, force=20.0, label="R pinch the mushroom")
+        yield from r.move(r.at() + UD * 0.14, t=6.0, label="R strip")
+        yield from r.open()
+        yield from r.move(r.at() + [0.0, 0.0, 0.10], t=1.5, label="R away")
+        yield from l.wait(2.0)
+        report("fingers")
+        return
+    if ctx.mode == "offplate":  # the left lifts the kebab and carries its point out beyond the plate's far rim
+        yield from l.move(l.at() + [0.0, 0.0, 0.035], t=1.5, label="L lift")
+        yield from l.move(l.at() + [0.17, 0.0, 0.0], t=3.0, label="L carry out")
+        yield from l.move(l.at() + [0.0, 0.0, -0.012], t=1.0, label="L lower")
+    # 2. the right hand takes the fork by its handle, lifts it and brings the tines over the stick behind the run
+    grab = lambda: FK().to_world(np.array([GRAB_X, 0.0, handle_z(GRAB_X) + F_TH_H / 2]))[0]
     gr = d.down(FORK_YAW)
     yield from r.move(grab() + [0.0, 0.0, 0.10], grip=gr, finger=OPEN, t=3.0, label="R over the fork")
     yield from r.servo(grab() + [0.0, 0.0, 0.10], timeout=1.0, label="R over")
-    yield from r.move(grab() + [0.0, 0.0, 0.002], t=1.5, label="R down")
-    yield from r.servo(grab() + [0.0, 0.0, 0.002], timeout=1.0, label="R down")
-    yield from r.close(0.010, force=40.0, label="R grip the fork")
+    yield from r.move(grab() + [0.0, 0.0, 0.001], t=1.5, label="R down")
+    yield from r.servo(grab() + [0.0, 0.0, 0.001], timeout=1.0, label="R down")
+    yield from r.close(0.008, force=40.0, label="R grip the fork")
     yield from r.move(r.at() + [0.0, 0.0, 0.09], t=1.5, label="R lift")
     rear = lambda: P("mushroom").to_world(np.array([-0.015, 0.0, 0.0]))[0]
-    Z_T = lambda: float(SK().pos[2]) + 0.005  # the tines middle, 5 mm over the stick axis
-    aim = lambda back: np.array([STK_X, rear()[1] + 0.004, Z_T()]) - back * H
+    Z_T = lambda: float(SK().pos[2]) + float(os.environ.get("KB_TZ", "0.005"))  # the tines' middle, this far over the stick axis
+    aim = lambda back: np.array([float(sl(0.0)[0]), rear()[1] + 0.004, Z_T()]) - back * H
     yield from r.move(r.at() + (aim(0.10) - tip()), t=3.0, label="R tines behind the run")
     yield from r.servo(aim(0.10), read=tip, timeout=2.0, label="R aim")
     yield from r.servo(aim(0.0), read=tip, timeout=3.0, label="R aim in")
@@ -493,15 +509,27 @@ def demo_script(ctx):
     report("fork in")
     # 3. push along the stick, straight along it, until the last piece has passed the point
     p0 = tip().copy()
-    dist = float(rear()[1] - sl(SK_L / 2)[1]) + 0.045
+    dist = float(rear()[1] - sl(SK_L / 2)[1]) + float(os.environ.get("KB_OVER", "0.035"))
     t_push = dist / 0.02
     yield from r.servo(lambda t: p0 + UD * min(dist, 0.02 * t), read=tip, tol=0.004, timeout=t_push + 4.0, gain=0.3, label="R push")
     print(f"[kb] push end: tip {tip()} mushroom {P('mushroom').pos} stick end {sl(SK_L / 2)}", flush=True)
     report("pushed")
     yield from r.wait(0.5)
-    yield from r.move(r.at() + [-0.05, 0.0, 0.10], t=1.5, label="R fork away")
-    if not ONE:
-        yield from l.open()
-        yield from l.move(l.at() + [0.0, 0.0, 0.10], t=1.5, label="L away")
+    # 4. the fork goes back to the board; the left lifts the bare skewer, draws it back off the plate and lays it on the board
+    yield from r.move(r.at() + [0.0, 0.0, 0.06], t=1.0, label="R fork up")
+    if ctx.mode in ("offplate", "one_arm"):
+        yield from l.wait(2.5)
+        report("end")
+        return
+    yield from r.move(np.r_[FORK_REST - 0.045 * H[:2], TOP + 0.03], t=2.5, label="R fork over the board")
+    yield from r.move(r.at() + [0.0, 0.0, -0.015], t=0.8, label="R fork down")
+    yield from r.open()
+    yield from r.move(r.at() + [0.0, 0.0, 0.10], t=1.2, label="R away")
+    if ctx.mode != "no_aside":
+        yield from l.move(l.at() + [0.0, 0.0, 0.04], t=1.5, label="L lift the skewer")
+        yield from l.move(l.at() + np.array(ASIDE), t=3.5, label="L skewer off the plate")
+        yield from l.move(np.r_[l.at()[:2], TOP + float(os.environ.get("KB_DZ", "0.004"))], t=1.5, label="L lay it on the board")
+    yield from l.open()
+    yield from l.move(l.at() + [0.0, 0.0, 0.10], t=1.5, label="L away")
     yield from l.wait(2.5)
     report("end")
