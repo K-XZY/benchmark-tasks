@@ -13,6 +13,7 @@ Final:  python demokit.py task.py OUT
 
 from __future__ import annotations
 
+import collections
 import math
 import os
 import pathlib
@@ -77,14 +78,17 @@ SEAT_R = 0.8 * MM  # a bearing is in its groove when within 0.8 mm of the groove
 SEAT_DEPTH = 0.0036  # axial: the last 0.4 mm of the 4 mm travel is the pop
 DETENT_N = float(os.environ.get("OR_POP", "8"))  # the pop-in force (estimate; also the pull that pops a seated joint out again)
 RIM_S = 0.0015  # a bearing off its groove meets the rim 1.5 mm into the travel
-PITCH_OK, ROLL_OK, YAW_OK = 12.0, 3.0, 6.0  # the groove's mouth admits the bearings within this much of line
-SLAM_V = 0.10  # m/s; a tip arriving faster at the pop is slammed (estimate), cracking the lip
+PITCH_OK, ROLL_OK, YAW_OK = 12.0, 3.0, 3.0  # the groove's mouth admits the bearings within this much of line
+PHYS_HZ = 240  # the harness's physics rate (12 physics steps a control step at 20 Hz); the grooves and the slam timing are read at every physics step
+SLAM_FROM = SEAT_DEPTH - 0.003  # the slam's timed segment: the tip's last 3 mm of travel before the pop (the bearings from 3.4 to 0.4 mm out)
+KNOCK_N = float(os.environ.get("OR_KNOCK", "3"))  # a sideways push on the seated joint harder than this (the arm pushes about 4 N sideways before it gives; the pop force is 8 N along the thumb) unseats it again (estimate)
+SLAM_STEPS = 7  # that 3 mm covered in 7 physics steps or fewer (29 ms at 240 Hz: a mean of 0.1 m/s or more) is a slam, which can crack a printed lip (estimate)
 HOLD_CAP_MM = 5.0
 FLEX_DEG, FLEX_RET = 60.0, 5.0
 CLEAR_M = 0.05
 
 # the tendons' tether (powered off: slack tendons, a loose leash; estimates) and the groove's lip
-K_LAT = 300.0  # N/m, sideways and up/down, about the tip's rest
+K_LAT = 100.0  # N/m, sideways and up/down, about the tip's rest (a loose leash: the 20 g tip sags 2 mm at rest, well past the 0.8 mm seat limit, so the hands must line it up)
 K_TURN = 0.05  # N m/rad, roll and yaw about the rest
 K_PITCH = 0.03  # N m/rad, about the bearings' axis
 K_LIP = DETENT_N / SEAT_DEPTH  # N/m along the thumb: the lip resists the bearings' entry, rising to 8 N at the pop
@@ -188,8 +192,8 @@ def _thumb() -> m.Part:
     ghost = dict(mass=0.004, friction=0.0, effort=200.0, inertia=(2e-7, 2e-7, 2e-7))
     links = [pp,
              m.slider("ty", "Y", -0.006, 0.0, (), (), at=cs, damping=1.5, armature=0.002, parent="pp", **ghost),
-             m.slider("tx", "X", -0.004, 0.004, (), (), at=cs, damping=1.5, armature=0.002, parent="ty", **ghost),
-             m.slider("tz", "Z", -0.006, 0.006, (), (), at=cs, damping=1.5, armature=0.002, parent="tx", **ghost),
+             m.slider("tx", "X", -0.006, 0.006, (), (), at=cs, damping=1.5, armature=0.002, parent="ty", **ghost),
+             m.slider("tz", "Z", -0.008, 0.008, (), (), at=cs, damping=1.5, armature=0.002, parent="tx", **ghost),
              m.hinge("roll", "Y", cs, -30.0, 30.0, (), (), damping=0.0004, armature=2e-6, parent="tz", **ghost),
              m.hinge("yaw", "Z", cs, -30.0, 30.0, (), (), damping=0.0004, armature=2e-6, parent="roll", **ghost),
              tip]
@@ -243,18 +247,94 @@ def _pose(j):
     return [t + Rr @ np.array([sx * BEAR_B, 0.0, 0.0]) - np.array([sx * BEAR_B, 0.0, 0.0]) for sx in (-1.0, 1.0)]
 
 
+def _hook_physics(env) -> None:
+    """Call TRIAL.physics after every physics step (240 Hz), not only every control step: Isaac Lab updates the scene's buffers once per physics step, inside each control step."""
+    scene = env.unwrapped.scene
+    if getattr(scene, "_orca_physics", False):
+        return
+    update = scene.update
+
+    def update_hook(*a, **k):
+        out = update(*a, **k)
+        TRIAL.physics(env)
+        return out
+
+    scene.update = update_hook
+    scene._orca_physics = True
+
+
 class Trial:
     def reset(self, env=None) -> None:
         self.n, self.held, self.latched, self.wall = 0, 0, False, False
-        self.pp_max, self.slam, self.flex_t, self.flex_max, self.flex_ret, self.flex_done = 0.0, 0.0, -1, -90.0, 90.0, False
+        self.pp_max, self.slam, self.flex_t, self.flex_max, self.flex_ret, self.flex_done = 0.0, False, -1, -90.0, 90.0, False
         self.score, self.full, self.last, self.tier = 0.0, False, {}, 0.0
-        self.prev_ty, self.armed, self.pull_n, self.popped_out, self.closed, self.latch_n = None, True, 0, 0, False, 0
+        self.armed, self.pull_n, self.popped_out, self.closed, self.latch_n = True, 0, 0, False, 0
+        self.live, self.k, self.k_in, self.pop_steps, self.pop_log = False, 0, None, None, ""
+        self.ramp, self.ramp_t = None, 0.0  # slam8: the slide's target runs along the thumb this far each physics step
+        self.hist = collections.deque(maxlen=SLAM_STEPS + 1)
         if env is not None:
             _tether(env)
+
+    def physics(self, env) -> None:
+        """Every physics step: the grooves' rim and lip, the pop, and the slam's timing, so a fast stroke can't pass the rim, or seat, between two control steps."""
+        if not self.live or self.latched:
+            return
+        asset = env.unwrapped.scene["thumb"]
+        q = asset.data.joint_pos[0].tolist()
+        names = asset.joint_names
+        J = {c: float(q[names.index(f"{c}_joint")]) for c in CHAIN}
+        self.k += 1
+        pitch, roll, yaw = (math.degrees(J[c]) for c in ("dp", "roll", "yaw"))
+        b = _pose(J)
+        lat = [float(math.hypot(p[0], p[2])) for p in b]
+        dep = [OUT_MM * MM + float(p[1]) for p in b]  # each bearing's travel into its groove
+        s = OUT_MM * MM + J["ty"]
+        aligned = bool(max(lat) <= SEAT_R and abs(pitch) <= PITCH_OK and abs(roll) <= ROLL_OK and abs(yaw) <= YAW_OK)
+        if not self.armed:
+            # coming out: the bearings ride back over the lip; once out past the rim, the joint can be pressed in again
+            if s <= RIM_S:
+                self.armed = True
+            return
+        # the rim: a bearing off its groove stops on the rim (a stiff drive where it stands); in line, the lip's spring is all that resists
+        if not aligned and s > RIM_S and not self.wall:
+            _gain(env, "ty", 50000.0, J["ty"], effort=2000.0)
+            self.wall = True
+        elif aligned and self.wall:
+            _gain(env, "ty", K_LIP, -OUT_MM * MM, effort=200.0)
+            self.wall = False
+        # the slam's clock: the physics step at which the tip last entered the final 3 mm before the pop
+        if s < SLAM_FROM:
+            self.k_in = None
+        elif self.k_in is None:
+            self.k_in = self.k
+        if self.ramp is not None and not self.latched:
+            self.ramp_t += self.ramp
+            _gain(env, "ty", RAMPK, self.ramp_t, effort=2000.0)
+        self.hist.append(s)  # the last SLAM_STEPS + 1 physics positions (the first is SLAM_STEPS steps back): a slam is the final 3 mm covered inside the last 7 steps, whatever came before (a pause earlier does not reset it)
+        # both bearings in: the joint closes (the pop), and is a hinge again
+        if aligned and min(dep) >= SEAT_DEPTH:
+            self.pop_steps = self.k - self.k_in
+            if len(self.hist) == self.hist.maxlen and self.hist[0] < SLAM_FROM:
+                self.slam = True
+            self.latched, self.closed, self.latch_n, self.ramp = True, False, 0, None
+            _gain(env, "ty", 50000.0, 0.0, effort=2000.0)
+            for c in ("tx", "tz"):
+                _gain(env, c, 50000.0, 0.0, effort=2000.0)
+            for c in ("roll", "yaw"):
+                _gain(env, c, 200.0, 0.0, effort=200.0)
+            _gain(env, "dp", K_PITCH, 0.0)  # the slack tendons, now about the closed joint
+            self.pop_log = (f"[orca] POP at physics step {self.k} (control step {self.n}): lat {np.round(np.array(lat) * 1000, 2)} mm, dep {np.round(np.array(dep) * 1000, 2)} mm, "
+                            f"pitch {pitch:.1f} roll {roll:.1f} yaw {yaw:.1f}; last 3 mm in {self.pop_steps} physics steps ({self.pop_steps * 1000 / PHYS_HZ:.0f} ms, "
+                            f"mean {0.003 * PHYS_HZ / max(self.pop_steps, 1):.3f} m/s){': SLAM' if self.slam else ''}")
 
     def step(self, env) -> None:
         if self.n == 0:
             _tether(env)
+            _hook_physics(env)
+            self.live = True
+        if self.pop_log:
+            print(self.pop_log, flush=True)
+            self.pop_log = ""
         th = m.state(env, "thumb")
         J = {k: th.joint(k) for k in ("pp",) + CHAIN}
         ang = J["pp"]
@@ -265,46 +345,18 @@ class Trial:
         lat = [float(math.hypot(p[0], p[2])) for p in b]
         dep = [OUT_MM * MM + float(p[1]) for p in b]  # each bearing's travel into its groove
         s = OUT_MM * MM + J["ty"]
-        dist = [float(math.hypot(lat[i], max(0.0, OUT_MM * MM - dep[i]))) for i in range(2)]
-        vin = 0.0 if self.prev_ty is None else (J["ty"] - self.prev_ty) * 20.0
-        self.prev_ty = J["ty"]
-        aligned = bool(max(lat) <= SEAT_R and abs(pitch) <= PITCH_OK and abs(roll) <= ROLL_OK and abs(yaw) <= YAW_OK)
         if self.latched:
             # a seated joint pops out again when the tip is pulled out along the thumb harder than the pop force (the closed joint's stiff slide reads the pull), as the real joint is built to
             self.latch_n += 1
             self.closed = self.closed or -J["ty"] < 0.00005 or self.latch_n >= 10  # the closing drive has drawn the bearings home (they latch up to 0.4 mm short of it), or 0.5 s has passed
-            self.pull_n = self.pull_n + 1 if self.closed and -J["ty"] * 50000.0 > DETENT_N else 0
+            side = abs(J["tx"]) * 50000.0  # a sideways knock: the stiff side slides read it as a force
+            self.pull_n = self.pull_n + 1 if self.closed and (-J["ty"] * 50000.0 > DETENT_N or side > KNOCK_N) else 0
             if self.pull_n >= 2:
                 self.latched, self.armed, self.wall, self.pull_n = False, False, False, 0
                 self.popped_out += 1
                 self.flex_t, self.flex_done, self.flex_max, self.flex_ret = -1, False, -90.0, 90.0
                 _tether(env)
-                print(f"[orca] POP OUT at step {self.n}: pulled {-J['ty'] * 50000.0:.1f} N", flush=True)
-        elif not self.armed:
-            # coming out: the bearings ride back over the lip; once out past the rim, the joint can be pressed in again
-            if s <= RIM_S:
-                self.armed = True
-        else:
-            # the rim: a bearing off its groove stops on the rim (a stiff drive where it stands); in line, the lip's spring is all that resists
-            if not aligned and s > RIM_S and not self.wall:
-                _gain(env, "ty", 50000.0, J["ty"], effort=2000.0)
-                self.wall = True
-            elif aligned and self.wall:
-                _gain(env, "ty", K_LIP, -OUT_MM * MM, effort=200.0)
-                self.wall = False
-            if s > RIM_S:
-                self.slam = max(self.slam, vin) if s > SEAT_DEPTH - 0.001 else self.slam
-            # both bearings in: the joint closes (the pop), and is a hinge again
-            if aligned and min(dep) >= SEAT_DEPTH:
-                self.latched, self.closed, self.latch_n = True, False, 0
-                _gain(env, "ty", 50000.0, 0.0, effort=2000.0)
-                for k in ("tx", "tz"):
-                    _gain(env, k, 50000.0, 0.0, effort=2000.0)
-                for k in ("roll", "yaw"):
-                    _gain(env, k, 200.0, 0.0, effort=200.0)
-                _gain(env, "dp", K_PITCH, 0.0)  # the slack tendons, now about the closed joint
-                print(f"[orca] POP at step {self.n}: lat {np.round(np.array(lat) * 1000, 2)} mm, dep {np.round(np.array(dep) * 1000, 2)} mm, pitch {pitch:.1f} roll {roll:.1f} yaw {yaw:.1f}, "
-                      f"in at {vin:.3f} m/s", flush=True)
+                print(f"[orca] POP OUT at step {self.n}: pulled {-J['ty'] * 50000.0:.1f} N, sideways {side:.1f} N", flush=True)
         # the hold cap: how far T-PP's middle has moved
         mid0 = np.array([PP_CENTRE[0], PP_CENTRE[1], ZC])
         mid = PIVOT + Rp @ (mid0 - PIVOT)
@@ -334,16 +386,13 @@ class Trial:
                 self.flex_ret = abs(pitch)
             self.flex_t += 1
         # tiers
-        deep = [dep[i] >= SEAT_DEPTH and lat[i] <= SEAT_R for i in range(2)]
         tier = 0.0
         if self.latched:
-            tier = 0.75  # both bearings seated: the closed joint is a free hinge on slack tendons, so the released tip's droop doesn't count (the real trial reads this with the feeler gauge alone)
+            tier = 0.5  # both bearings seated (the pop): the closed joint is a free hinge on slack tendons, so the released tip's droop doesn't count (the real trial reads this with the feeler gauge alone)
             if self.flex_done and self.flex_max >= FLEX_DEG and self.flex_ret <= FLEX_RET and clear:
                 tier = 1.0
-            if self.slam > SLAM_V:
+            if self.slam:
                 tier = min(tier, 0.5)
-        elif sum(deep) >= 1:
-            tier = 0.5
         elif abs(pitch) <= 10.0 and abs(roll) <= 10.0 and s >= OUT_MM * MM - 0.0005 - 0.0035 and max(lat) <= 0.0015:
             tier = 0.25
         if self.pp_max > HOLD_CAP_MM:
@@ -353,7 +402,7 @@ class Trial:
         self.n += 1
         self.last = dict(s_mm=round(s * 1000, 2), pitch=round(pitch, 1), roll=round(roll, 1), yaw=round(yaw, 1), tx=round(J["tx"] * 1000, 2), tz=round(J["tz"] * 1000, 2),
                          lat=[round(x * 1000, 2) for x in lat], dep=[round(x * 1000, 2) for x in dep], wall=self.wall, latched=self.latched, pp_mm=round(self.pp_max, 2),
-                         clear_mm=round(dmin * 1000), held=self.held, flex=(round(self.flex_max, 1), round(self.flex_ret, 1), self.flex_done), slam=round(self.slam, 3), out=self.popped_out, tier=tier)
+                         clear_mm=round(dmin * 1000), held=self.held, flex=(round(self.flex_max, 1), round(self.flex_ret, 1), self.flex_done), slam=self.slam, pop_steps=self.pop_steps, k=self.k, k_in=self.k_in, out=self.popped_out, tier=tier)
         if self.n % 20 == 0 and os.environ.get("OR_TRACE"):
             print(f"[orca] step {self.n}: {self.last}", flush=True)
 
@@ -401,6 +450,13 @@ ROT_G = float(os.environ.get("OR_RG", "0.3"))  # the share of the tip's angle th
 ROT_MAX = float(os.environ.get("OR_RMAX", "1.0"))  # degrees a control step, at most
 AX_G = float(os.environ.get("OR_AG", "0.3"))
 LAT_G = float(os.environ.get("OR_LG2", "0.5"))
+SLAM_LEAD = float(os.environ.get("OR_SLAM", "8")) * MM  # slam: the hand's target runs this far along the thumb each control step (0.16 m/s)
+RAMPK = float(os.environ.get("OR_RAMPK", "12000"))  # slam8: the strike's spring on the slide, N/m
+SLAMV8 = float(os.environ.get("OR_SLAMV8", "0.375")) * MM  # slam8: the strike's travel each physics step: 3 mm in 8 steps, not 7 (not a slam)
+SLAMK = float(os.environ.get("OR_SLAMK", "50000"))  # slam_held: the strike, a spring on the tip's slide toward the seat (N/m, 3.6 mm out at 50000 is 180 N)
+SLAM_STEER = os.environ.get("OR_SLAMV", "steer") == "steer"  # slam: the stroke keeps the stepped press's steering (pitch, roll, yaw and line), without its steps
+SLAM_CAP = float(os.environ.get("OR_SLAMC", "60")) * MM  # slam: the hand's target leads the hand by up to this much along the thumb (about twice the press's push)
+SLAM_SHORT = float(os.environ.get("OR_SLAMS", "0.3")) * MM  # slam: the stepped press stops this far short of the timed 3 mm
 
 
 def vgrip(phi=90.0, tilt=90.0, roll=-90.0):
@@ -409,10 +465,11 @@ def vgrip(phi=90.0, tilt=90.0, roll=-90.0):
 
 
 def demo_script(ctx):
-    """Modes: full. none: the arms wait. no_hold: only the right hand, which grips the tip square and presses (T-PP unheld swings). cocked: full, but the tip is pressed as gripped, not squared. poke: the left hand holds, the right hand pushes the hanging tip's end with closed fingers, without gripping. hover: full up to the line-up, then the tip is held square at its seat's mouth and let go, with no press. slam: full, but the squared tip is driven in at once, fast and hard, with no steps. pull: full until the joint pops in, then the right hand pulls the gripped tip 15 mm back out along the thumb before letting go."""
+    """Modes: full. none: the arms wait. no_hold: only the right hand, which grips the tip square and presses (T-PP unheld swings). cocked: full, but the tip is pressed as gripped, not squared. poke: the left hand holds, the right hand pushes the hanging tip's end with closed fingers, without gripping. hover: full up to the line-up, then the tip is held square at its seat's mouth and let go, with no press. slam: full, but the stepped press stops just short of the last 3 mm, squared, and the tip is struck home from there in one stroke (the hand's target runs along the thumb at 0.16 m/s, kept on the grooves' line). yawed: full, but the squared tip is turned 4.5 degrees in yaw and pressed as gripped. slam_held: the left hand holds T-PP; the right squares the tip to the last 3 mm, lets go, and a hard push strikes it home. knock: full, then the gripped tip is pushed 15 mm sideways and let go. yaw_hold: full, but the tip is held 2.8 degrees off in yaw and pressed to 3.45 mm in, then let go. regrip_seated: full, then after the pop the jaws open and close again before the release. release_raw: full without the ease-off before the jaws open. slam8: as slam_held with a slower strike, the last 3 mm in 8 physics steps (not a slam). nudge_up: full, then the gripped tip is pushed 15 mm up and let go. hover_hold: the tip is held square at its seat's mouth, T-PP held, with no press, to the end. slam_dwell: slam_held with a 1 s pause at the start of the last 3 mm. pull: full until the joint pops in, then the right hand pulls the gripped tip 15 mm back out along the thumb before letting go."""
     mode = ctx.mode
-    if mode not in ("full", "none", "no_hold", "cocked", "poke", "hover", "slam", "pull"):
+    if mode not in ("full", "none", "no_hold", "cocked", "poke", "hover", "slam", "pull", "yawed", "slam_held", "knock", "yaw_hold", "regrip_seated", "release_raw", "slam_dwell", "slam8", "nudge_up", "hover_hold"):
         raise ValueError(f"unknown mode {mode!r}")
+    YAWD = 2.8 if mode == "yaw_hold" else 4.5  # yawed turns the tip this far in yaw, yaw_hold 2.8
     L, R = ctx.left, ctx.right
     if mode == "none":
         yield from L.wait(3.0)
@@ -481,19 +538,27 @@ def demo_script(ctx):
             yield from R.move(R.at() - Rp @ off, t=0.5, label="line up")
             yield from R.wait(0.2)
         print(f"[orca] lined up: {TRIAL.last}", flush=True)
+        if mode in ("yawed", "yaw_hold"):  # turn the squared tip 4.5 (yaw_hold: 2.8) degrees about the vertical, then press as gripped (nothing turned out)
+            j = ctx.state("thumb")
+            Rp = _RH(j.joint("pp"))
+            pc = seat() + Rp @ np.array([j.joint("tx"), j.joint("ty"), j.joint("tz")])
+            yield from R.arc(pc, Rp @ np.array([0.0, 0.0, 1.0]), YAWD - math.degrees(j.joint("yaw")), t=0.8, label="yaw the tip")
+            yield from R.wait(0.3)
+            print(f"[orca] yawed: {TRIAL.last}", flush=True)
         # press the tip along the thumb until both bearings are in, steering by where its bearings are: the lip's 8 N is met by the arm's own stiffness as the command leads
         def bearings():
             j = ctx.state("thumb")
             return seat() + _RH(j.joint("pp")) @ np.array([j.joint("tx"), j.joint("ty"), j.joint("tz")])
 
-        def stepped_press():
+        def stepped_press(until=None, fast=False, stop_s=None):
             """Press in small steps (STEP_MM of the bearings' travel), reading the tip's pitch, roll and yaw every control step and turning the hand about the bearings' centre to take them out;
             the bearings are also kept on their grooves' line by shifting the hand sideways. A step is taken only once the tip is within 1 degree; past DRIFT degrees the press backs off 0.5 mm."""
             c, rot = d.ik.tcp_pose(R.q, R.base)
             s_goal = None
             out = {"popped": False, "steps": 0, "backoffs": 0, "worst_yaw": 0.0, "worst_roll": 0.0}
             backing = 0
-            rg = ROT_G if mode != "cocked" else 0.0  # cocked: pressed as gripped, nothing turned out
+            rg = ROT_G if mode != "cocked" else 0.0
+            yoff = YAWD if mode in ("yawed", "yaw_hold") else 0.0  # yawed: the tip is held 4.5 degrees off in yaw, and steered back to that if it drifts  # cocked: pressed as gripped, nothing turned out
             for k in range(round(STEP_S * 20)):
                 if TRIAL.latched:
                     out["popped"] = True
@@ -502,21 +567,25 @@ def demo_script(ctx):
                 J = {q: j.joint(q) for q in ("pp",) + CHAIN}
                 Rp = _RH(J["pp"])
                 s = OUT_MM * MM + J["ty"]
+                if stop_s is not None and s >= stop_s:
+                    break  # yaw_hold: pressed to this far in, then held
+                if until is not None and s >= until and max(abs(math.degrees(J[q])) for q in ("roll", "yaw")) <= 1.0 and abs(math.degrees(J["dp"])) <= 1.5 and math.hypot(J["tx"], J["tz"]) <= 0.0004:
+                    break  # slam: squared at the start of the timed 3 mm, for the stroke
                 if s_goal is None:
-                    s_goal = s
+                    s_goal = OUT_MM * MM + PRESS_PAST if fast else s
                 p_deg, r_deg, y_deg = (math.degrees(J[q]) for q in ("dp", "roll", "yaw"))
                 if s > RIM_S - 0.0003:
                     out["worst_yaw"] = max(out["worst_yaw"], abs(y_deg))
                     out["worst_roll"] = max(out["worst_roll"], abs(r_deg))
                 pc = seat() + Rp @ np.array([J["tx"], J["ty"], J["tz"]])
                 # back off when the tip drifts
-                if rg > 0 and backing == 0 and (abs(y_deg) > DRIFT or abs(r_deg) > DRIFT):
+                if rg > 0 and backing == 0 and not fast and (abs(y_deg - yoff) > DRIFT or abs(r_deg) > DRIFT):
                     s_goal = max(0.0, s - 0.0005)
                     backing = 10
                     out["backoffs"] += 1
                 # turn the hand about the bearings' centre: yaw about the vertical, roll about the thumb's axis, pitch about the bearings' axis
                 cl = math.radians(ROT_MAX)
-                Rc = (axis_angle_matrix(Rp @ np.array([0.0, 0.0, 1.0]), float(np.clip(-rg * math.radians(y_deg), -cl, cl)))
+                Rc = (axis_angle_matrix(Rp @ np.array([0.0, 0.0, 1.0]), float(np.clip(-rg * math.radians(y_deg - yoff), -cl, cl)))
                       @ axis_angle_matrix(Rp @ np.array([0.0, 1.0, 0.0]), float(np.clip(-rg * math.radians(r_deg), -cl, cl)))
                       @ axis_angle_matrix(Rp @ np.array([1.0, 0.0, 0.0]), float(np.clip(-rg * math.radians(p_deg), -cl, cl))))
                 t_now = R.tcp()
@@ -525,12 +594,15 @@ def demo_script(ctx):
                 # along the thumb to the step's goal; sideways and up onto the grooves' line
                 u = Rp @ np.array([0.0, 1.0, 0.0])
                 lat = -(Rp @ np.array([J["tx"], 0.0, J["tz"]]))
-                c = c + np.clip(AX_G * (s_goal - s) * u + LAT_G * lat, -0.002, 0.002)
+                c = c + (np.clip(SLAM_LEAD * u + LAT_G * lat, -SLAM_LEAD - 0.002, SLAM_LEAD + 0.002) if fast else np.clip(AX_G * (s_goal - s) * u + LAT_G * lat, -0.002, 0.002))
                 lead = float((c - t_now) @ u)
-                if lead > PRESS_LEAD:
-                    c = c - (lead - PRESS_LEAD) * u
-                square = rg == 0 or (abs(y_deg) <= 1.0 and abs(r_deg) <= 1.0 and abs(p_deg) <= 1.5)
-                if backing > 0:
+                cap = SLAM_CAP if fast else PRESS_LEAD
+                if lead > cap:
+                    c = c - (lead - cap) * u
+                square = rg == 0 or (abs(y_deg - yoff) <= 1.0 and abs(r_deg) <= 1.0 and abs(p_deg) <= 1.5)
+                if fast:
+                    pass
+                elif backing > 0:
                     backing -= 1
                 elif square and s >= s_goal - 0.00015:
                     s_goal = min(OUT_MM * MM + PRESS_PAST, s_goal + STEP_MM * MM)
@@ -545,34 +617,101 @@ def demo_script(ctx):
 
         c = d.ik.tcp_pose(R.q, R.base)[0]
         res = {"popped": False, "steps": 0}
-        stepped = STEPPED and mode not in ("hover", "slam")
-        gain, lead_cap = (1.0, 0.060) if mode == "slam" else (PRESS_GAIN, PRESS_LEAD)
-        if mode == "hover":
+        stepped = STEPPED and mode not in ("hover", "hover_hold", "slam", "slam8", "slam_held", "slam_dwell")
+        gain, lead_cap = PRESS_GAIN, PRESS_LEAD
+        if mode in ("hover", "hover_hold"):
+            if mode == "hover_hold":
+                res = yield from stepped_press(until=0.0008)  # line up and square, to 0.8 mm into the mouth, and stop
             yield from R.wait(2.0)
+            if mode == "hover_hold":  # the tip stays gripped square at the mouth, T-PP held, no press, to the end
+                yield from R.wait(8.0)
+                print(f"[orca] end {TRIAL.last}", flush=True)
+                return
+        elif mode == "yaw_hold":
+            res = yield from stepped_press(stop_s=0.00345)
+            yield from R.wait(1.0)
         elif stepped:
             res = yield from stepped_press()
-        for k in range(0 if (stepped or mode == "hover") else round(PRESS_S * 20)):
+        elif mode in ("slam_held", "slam_dwell", "slam8"):
+            # full to the last 3 mm, squared; then a hard push on the tip along the thumb (a 50000 N/m spring on its slide, OR_SLAMK) strikes it home, the grip still closed and T-PP held
+            res = yield from stepped_press(until=SLAM_FROM - SLAM_SHORT)
+            print(f"[orca] {mode} from: {TRIAL.last}", flush=True)
+            if mode == "slam_dwell":
+                yield from R.wait(1.0)  # a pause at the start of the last 3 mm, then the strike
+            if mode == "slam8":  # a strike that takes 8 physics steps for the last 3 mm: the slide's target runs home at 0.375 mm a physics step (0.09 m/s)
+                TRIAL.ramp_t, TRIAL.ramp = float(ctx.state("thumb").joint("ty")), SLAMV8
+                for c in ("tx", "tz"):  # the strike is a pure push along the thumb: the slow stroke keeps the tip on the grooves' line
+                    _gain(ctx.emb._env, c, 20000.0, 0.0, effort=2000.0)
+            else:
+                _gain(ctx.emb._env, "ty", SLAMK, 0.0, effort=2000.0)  # a strong spring on the tip's slide toward the seat: a pure push along the thumb, with no torque on the tip
+            for k in range(20):
+                if TRIAL.latched:
+                    res["popped"] = True
+                    break
+                yield
+            if not TRIAL.latched:
+                _gain(ctx.emb._env, "ty", K_LIP, -OUT_MM * MM, effort=200.0)
+            print(f"[orca] struck: {TRIAL.last}", flush=True)
+        elif mode == "slam":
+            # pressed in steps as full, squared and in line, to just short of the last 3 mm; then struck home in one stroke: the hand's target runs SLAM_LEAD along the thumb each control step
+            res = yield from stepped_press(until=SLAM_FROM - SLAM_SHORT)
+            print(f"[orca] slam from: {TRIAL.last}", flush=True)
+            if SLAM_STEER:
+                res = yield from stepped_press(fast=True)
+            c, rot = d.ik.tcp_pose(R.q, R.base)
+            for k in range(0 if SLAM_STEER else round(1.0 * 20)):
+                if TRIAL.latched:
+                    res["popped"] = True
+                    break
+                j = ctx.state("thumb")
+                Rp = _RH(j.joint("pp"))
+                u = Rp @ np.array([0.0, 1.0, 0.0])
+                lat = -(Rp @ np.array([j.joint("tx"), 0.0, j.joint("tz")]))
+                c = c + SLAM_LEAD * u + np.clip(LAT_G * lat, -0.002, 0.002)  # straight along the thumb, SLAM_LEAD a control step, kept on the grooves' line
+                lead = float((c - R.tcp()) @ u)
+                if lead > 0.020:
+                    c = c - (lead - 0.020) * u
+                R._solve(c, rot)
+                yield
+            R._solve(R.tcp(), rot)
+        for k in range(0 if (stepped or mode in ("hover", "slam", "slam8", "slam_held", "slam_dwell", "yaw_hold")) else round(PRESS_S * 20)):
             if TRIAL.latched:
                 res["popped"] = True
                 break
             Rp = _RH(ctx.state("thumb").joint("pp"))
             err = seat() + Rp @ np.array([0.0, PRESS_PAST, 0.0]) - bearings()  # aim a little past the seat, so the lead (the push) keeps growing until the joint pops
-            c = c + np.clip(gain * err, -0.008 if mode == "slam" else -0.002, 0.008 if mode == "slam" else 0.002)
+            c = c + np.clip(gain * err, -0.002, 0.002)
             u = Rp @ np.array([0.0, 1.0, 0.0])
             lead = float((c - R.tcp()) @ u)
-            if lead > lead_cap:  # about 15 N: no harder (slam: about 30 N)
+            if lead > lead_cap:  # about 15 N: no harder
                 c = c - (lead - lead_cap) * u
             R._solve(c, R.grip.rot)
             res["steps"] = k + 1
             yield
         print(f"[orca] pressed: {res} {TRIAL.last}", flush=True)
         yield from R.wait(0.3)
+        if mode == "knock":  # seated, then pushed 15 mm sideways in the grip
+            Rp = _RH(ctx.state("thumb").joint("pp"))
+            yield from R.move(R.tcp() + 0.015 * (Rp @ np.array([1.0, 0.0, 0.0])), t=0.6, label="knock the tip sideways")
+            yield from R.wait(0.3)
+            print(f"[orca] knocked: {TRIAL.last}", flush=True)
+        if mode == "nudge_up":  # seated, then pushed 15 mm up in the grip
+            yield from R.move(R.tcp() + np.array([0.0, 0.0, 0.015]), t=0.6, label="nudge the tip up")
+            yield from R.wait(0.3)
+            print(f"[orca] nudged: {TRIAL.last}", flush=True)
         if mode == "pull":  # seated, then pulled straight back out in the grip
             u = _RH(ctx.state("thumb").joint("pp")) @ np.array([0.0, 1.0, 0.0])
             yield from R.move(R.tcp() - 0.015 * u, t=1.0, label="pull the tip back out")
             yield from R.wait(0.3)
             print(f"[orca] pulled: {TRIAL.last}", flush=True)
-        yield from R.move(R.tcp(), t=0.4, label="ease off")  # take back the lead the press built up, so the opened fingers don't lunge
+        if mode == "regrip_seated":  # seated, then the jaws open and close on the tip again before the release
+            yield from R.move(R.tcp(), t=0.4, label="ease off")
+            yield from R.open(label="open")
+            yield from R.wait(0.3)
+            yield from R.move(R.tcp(), finger=f_close, t=0.5, label="close again")
+            yield from R.wait(0.3)
+        if mode != "release_raw":  # release_raw skips the ease-off
+            yield from R.move(R.tcp(), t=0.4, label="ease off")  # take back the lead the press built up, so the opened fingers don't lunge
         yield from R.open(label="release tip")
         yield from R.move(R.at() + [0, -0.10, 0.06], t=1.2, label="right back")
     if mode != "no_hold":
