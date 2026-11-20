@@ -152,7 +152,7 @@ def held(tips, part, grip: Grip, *, resting: bool, hand: str | None = None) -> b
     its rest (`resting` False). `hand` restricts it to "left" or "right"; by default either hand counts, and both are always checked.
 
     Reads: the jaws shut on the part, as a camera on the hand would show.
-    Blocks: an open gripper hovering round the part; one fingertip near or on it; jaws hovering a few millimetres off it; jaws shut beside it or
+    Blocks: an open gripper hovering round the part; one fingertip near or on it; jaws hovering more than `air` (3 mm) off it, or a hand closed beside it inside the grip's box but off its surface (the box is wider than the part: a task that needs contact must also test each pad's distance to the part); jaws shut beside it or
     through a part with no collider; a part nudged along or still lying on its stand; the hand the text does not name (with `hand`).
 
     `resting` is required so that it is always decided: pass `on_support(...)`, a height test, or False for a part that never rests (a fixed one
