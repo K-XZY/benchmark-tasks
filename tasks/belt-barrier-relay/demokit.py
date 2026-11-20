@@ -281,6 +281,7 @@ class Ctx:
         self.emb, self.obs, self.mode = emb, obs, mode
         self.left, self.right = Arm(self, "left"), Arm(self, "right")
         self.t = 0.0
+        self.snaps: list[str] = []  # names a script asks to have pictured on the next step: demokit writes OUT/<name>_<camera>.png ("setup": the top camera, as setup.png)
 
     def arm(self, side: str) -> Arm:
         return self.left if side == "left" else self.right
@@ -500,6 +501,7 @@ def play(emb, module, mode: str, out: Path, size: tuple[int, int], max_steps: in
     script = module.demo_script(ctx)
     rec = Recorder(out, size) if record else None
     if rec:
+        rec.setup = bool(getattr(module, "SNAP_SETUP", False))  # the script takes its own setup picture
         rec.add(obs.images)
     info: dict = {}
     steps, ended, success, reason = 0, None, False, None
@@ -530,6 +532,13 @@ def play(emb, module, mode: str, out: Path, size: tuple[int, int], max_steps: in
                 worst_30 = max(worst_30, span)
         if rec:
             rec.add(result.observation.images)
+        for name in ctx.snaps:
+            if name == "setup":
+                _save_png(result.observation.images["top_cam"], out / "setup.png")
+            else:
+                for c, image in result.observation.images.items():
+                    _save_png(image, out / f"{name}_{c}.png")
+        ctx.snaps.clear()
         if stills and steps % stills == 0:
             for c, image in result.observation.images.items():
                 _save_png(image, out / f"{c}_{steps:05d}.png")
