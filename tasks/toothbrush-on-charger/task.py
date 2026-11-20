@@ -120,7 +120,7 @@ ON_POST_MM, IN_MM = 3.0, 12.0  # 0.67: the base's centre within 3 mm of the post
 SEAT_MM, SEAT_DEG = 2.0, 5.0  # 1.0: base on the charger's top (within 2 mm), tilt under 5 degrees, every part of both grippers 20 mm or more from the handle, still, for 2 s
 CLEAR = 0.020  # over the 17 mm a point of the gripper can lie from its nearest lattice point (the lattice is 2 cm apart), so a touch anywhere on the gripper fails it
 HOLD_STEPS = 40  # 2 s at 20 Hz
-DROP_SPEED = 0.30  # void: the base's centre ever falling faster than this (a free fall of 4.6 mm); read after every physics step
+DROP_SPEED, CARRY = 0.30, 0.15  # void: the base falling faster than 0.3 m/s and more than 0.15 m/s faster than both hands move down: a release (free fall of about 5 mm); read after every physics step
 CHARGER_MOVE, CHARGER_TILT = 0.020, 20.0  # void: the charger pushed more than 20 mm off its mark, or tipped
 
 
@@ -145,8 +145,18 @@ class Trial:
         if env is not None:
             self.step(env)
 
-    def _fall(self, b) -> None:
-        if self.lifted_once and float(b.lin_vel[2]) < -DROP_SPEED:
+    def _fall(self, env, b) -> None:
+        """A drop: the base falls faster than 0.3 m/s and faster than every hand moves down (a release, not a controlled move that carries it)."""
+        v = float(b.lin_vel[2])
+        if not self.lifted_once or v >= -DROP_SPEED:
+            return
+        scene = env.unwrapped.scene
+        hands = []
+        for side in ("left", "right"):
+            robot = scene[f"{side}_robot"]
+            i = robot.find_bodies("gripper")[0][0]
+            hands.append(float(robot.data.body_link_vel_w[0, i, 2]))
+        if min(hands) > v + CARRY:
             self.dropped = True
 
     def step(self, env) -> None:
@@ -156,7 +166,7 @@ class Trial:
         tilt = b.tilt_deg()
         if base[2] - TOP > 0.010:
             self.lifted_once = True
-        self._fall(b)
+        self._fall(env, b)
         if float(np.linalg.norm(np.asarray(c.pos)[:2] - np.asarray(CHARGER_AT[:2]))) > CHARGER_MOVE or c.tilt_deg() > CHARGER_TILT:
             self.pushed = True
         loc = c.to_local(base[None, :])[0]  # the base's centre in the charger's frame
@@ -198,7 +208,7 @@ class Trial:
         def update(*a, **k):
             r = orig(*a, **k)
             try:
-                trial._fall(m.state(env, "brush"))
+                trial._fall(env, m.state(env, "brush"))
             except Exception as e:  # the extra read must not break the run
                 if not trial.warned:
                     trial.warned = True

@@ -2,7 +2,7 @@
 
 An Oral-B electric toothbrush handle lies on its side on the counter. Its charger, a Braun Oral-B Type 3757, has a short post on its top that fits a recess in the handle's base. One gripper picks the handle up across its body, turns it upright, centres its base over the post, lowers it straight down until the base sits on the charger's top with the post inside the recess, and lets go. The handle must then stand on its own: nothing guides it but the post, 10 mm across, inside a recess 11 mm across, and once the handle is close its own base hides the post. A handle let go tilted rests on the post's tip and topples, and a push off-centre slides the light charger across the counter. The other arm is not needed; a person might steady the charger with the other hand, and the task does not ask for it.
 
-What sets it apart from a slot-guided dock (our TK-9DRT5J, a Switch lowered into its dock) is the release: there are no walls. The handle is 232 mm tall and 27 mm across on a post 13 mm tall, so it stands only if it is let go plumb and seated, and it has to stay standing for 2 s with both grippers clear.
+What sets it apart from a slot-guided dock is the release: there are no walls. The handle is 232 mm tall and 27 mm across on a post 13 mm tall, so it stands only if it is let go plumb and seated, and it has to stay standing for 2 s with both grippers clear.
 
 ## Run
 
@@ -28,7 +28,7 @@ The score is read from the state at the end of the run. Only the failures latch;
 - **0.33, lifted upright:** the handle's base more than 10 mm above the counter and its axis within 15 degrees of vertical (base down). Real trial: by eye on the video.
 - **0.67, on the post:** upright as above, the base's centre within 3 mm of the post's axis and at most 12 mm above the charger's top, so the post is at least 1 mm inside the recess. Real trial: a side photo against a millimetre scale shows the handle centred on the charger with its base no more than 12 mm above the charger's top (the post is hidden; a base that low over the post can only be on it).
 - **1.0, standing on the charger:** on the post with its base within 2 mm of the charger's top, tilted under 5 degrees, still, and every part of both grippers (fingertips, pads, palm, housing and wrist link: a lattice 2 cm apart over each gripper from 12 cm behind its frame to the fingertips, plus points along both pads) 20 mm or more from the handle's exact envelope (a capped cylinder 13.5 mm in radius from its base to the head's top; 20 mm is more than the 17 mm a point of the gripper can lie from its nearest lattice point), for 2 s running (a count that restarts if any of these breaks). Real trial: the brush stands on the charger by itself with its base flat on the charger's top, a phone level app on the handle reads under 5 degrees, and the handle's charge light flashes green.
-- **Void (0):** the charger pushed more than 20 mm off its mark or tipped over 20 degrees, or the handle's base falling faster than 0.3 m/s at any time after it has been lifted (a free fall of about 5 mm: a handle dropped rather than lowered; read after every physics step). Real trial: tape marks round the charger's feet; in the side video, the frame where the fingers open shows the base no more than 5 mm above the charger's top on the mm scale (more is a drop).
+- **Void (0):** the charger pushed more than 20 mm off its mark or tipped over 20 degrees, or the handle dropped after it has been lifted: its base falling faster than 0.3 m/s and more than 0.15 m/s faster than both hands move down, so a release (a free fall of about 5 mm), not a controlled move that carries it down; read after every physics step. Real trial: tape marks round the charger's feet; in the side video, the frame where the fingers open shows the base no more than 5 mm above the charger's top on the mm scale (more is a drop).
 
 | Mode | What it does | Score (GPU) |
 |---|---|---|
@@ -37,7 +37,7 @@ The score is read from the state at the end of the run. Only the failures latch;
 | beside | as full, but lowered onto the charger's top 20 mm beside the post and let go: it stands there | 0.33 (upright off the counter, post not in the recess) |
 | counter | stood upright on the counter beside the charger and let go | 0 |
 | tilted | as full to over the post, then tilted 12 degrees, lowered onto the post's tip and let go | 0 (the 12 degree tilt, near the wrist's limit, drags the charger 55 mm, and the handle let go on the post's tip topples) |
-| drop | as full, but let go with the base 20 mm above the charger's top, centred | 0 (a drop: it lands seated, but its base fell at over 0.3 m/s) |
+| drop | as full, but let go with the base 20 mm above the charger's top, centred | 0 (a drop: it lands seated, but its base fell at over 0.3 m/s away from the hands) |
 | none | nothing | 0 |
 
 ## Sizes
