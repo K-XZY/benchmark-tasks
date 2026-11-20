@@ -8,7 +8,7 @@ From this folder:
 
 ```
 python demokit.py task.py OUT                      # final film, 640 x 360, GPU to yourself
-python demokit.py task.py OUT --no-record --mode full,none,one_hand,one_hand_rim,drag,leave,drop,undo,hold_on,drop_low15,drop_low19,drag2,tip_release,tip_gentle
+python demokit.py task.py OUT --no-record --mode full,none,one_hand,one_hand_rim,drag,leave,drop,undo,hold_on,drop_low15,drop_low19,drag2,tip_release,tip_gentle,slow_late
 ```
 
 The harness's instruction (Dream-1 run): `--instruction "Take the used pail out from under the commode seat and set it down on the floor in front of the commode without spilling it."`
@@ -30,14 +30,15 @@ The harness's instruction (Dream-1 run): `--instruction "Take the used pail out 
 | drag2 | as full to the set-down, both still holding, then dragged 10 cm along the floor, then let go | 0.4 (the drag tilts the pail to 16.6 degrees: a SPLASH; a drag that stays under 15 degrees would not be penalised) |
 | hold_on | as full, but only the right lets go; the left keeps its pinch on the rim | 0.5 (OUT, not DOWN: a hand 4 mm from the pail) |
 | drop_low15, drop_low19 | as full, the pail held with its lowest corner 15 or 19 mm over the floor, then both let go | 0 (the pail tips over on landing, 75 degrees; HARD trips) |
+| slow_late | as full to 80 mm up, then lowered fast to 40 mm up (about 0.3 m/s), braked to a stop and set down at 0.05 m/s; the left then presses the front down until the pail is level, as full does, and both let go | 1.0 (touches at 0.05 m/s, lets go at 0.25 m/s: a pail lowered fast, slowed and set down gently is not HARD) |
 | tip_gentle | as tip_release, but the front lifted only 5 mm | 1.0 (a 5 mm settle is not a hard landing; the tipped pitch is 1 degree) |
-| tip_release | as full, but the left lifts the pail's front 60 mm so it rests on its back edge, then both let go and it slaps flat | 0 (HARD: the front corners land faster than 0.3 m/s; held pitch 3 degrees, peak tilt 9.6, under the 15 degree splash limit, so it is HARD that trips) |
+| tip_release | as full, but the left lifts the pail's front 60 mm so it rests on its back edge, then both let go and it slaps flat | 0 (HARD: the front corners touch down faster than 0.3 m/s; held pitch 3 degrees, peak tilt 9.6, under the 15 degree splash limit, so it is HARD that trips) |
 | leave | right draws it 100 mm by the bail and lets go on the brackets | 0.25 (drawn, still on the brackets) |
-| drop | as full, both let go 12 cm over the floor | 0 (hard landing, tipped) |
+| drop | as full, both let go 12 cm over the floor | 0 (HARD: the corners touch the floor at about 0.9 m/s; the pail tips) |
 | undo | as full to the set-down, both let go for 0.5 s, then the left takes the rim again and lifts it 8 cm and 20 cm back toward the brackets | 0.25 (drawn, not OUT: the flange is back over the brackets' ends). Lifted but still out of the brackets it would score 0.5 |
 | none | nothing | 0.0 |
 
-The score is read from the state at the end: only the failures latch (SPLASH, tilt over 15 degrees; HARD, any of the bottom's four corners falling faster than 0.3 m/s within 0.10 m of the floor (the corner's velocity is the pail's linear velocity plus its angular velocity crossed with the corner's arm, so a pail let go tipped on one edge that slaps flat counts), an estimate, read after every physics step and not only at the 20 Hz control step, so a short fall cannot slip between samples; DROPPED; tipped over), so drawn, OUT and DOWN count only while true and an undone step loses its credit. HARD scores 0; DOWN needs every point of both grippers (fingertips, pads, palm, housing and wrist link: a lattice 2 cm apart over each gripper from 12 cm behind its frame to the fingertips) 30 mm or more from the pail's whole outer surface (flange, walls and bottom, measured to a 4 mm grid over it) and from its bail and the pail still for 1 s, counted as a running count that resets.
+The score is read from the state at the end: only the failures latch (SPLASH, tilt over 15 degrees; HARD, a hard landing: the speed at first floor contact. Each of the bottom's corners is read the first step it is under 2 mm from the floor, and any corner then falling faster than 0.3 m/s voids the run (the demo touches down at 0.06 m/s; speed higher up does not count, so a pail lowered fast and slowed before it lands is not HARD; the corner's velocity is the pail's linear velocity plus its angular velocity crossed with the corner's arm, so a pail let go tipped on one edge that slaps flat counts), an estimate, read after every physics step and not only at the 20 Hz control step, so a short fall cannot slip between samples; a spill is read from the SPLASH tilt, as the contents are rigid; DROPPED; tipped over), so drawn, OUT and DOWN count only while true and an undone step loses its credit. HARD scores 0; DOWN needs every point of both grippers (fingertips, pads, palm, housing and wrist link: a lattice 2 cm apart over each gripper from 12 cm behind its frame to the fingertips) 30 mm or more from the pail's whole outer surface (flange, walls and bottom, measured to a 4 mm grid over it) and from its bail and the pail still for 1 s, counted as a running count that resets.
 
 ## Sizes
 
@@ -82,7 +83,7 @@ The maker's steps (11135-1 manual, 'assembling commode seat and lid'): 'Align th
 What the video sees, by the scorer's terms:
 - DRAWN and OUT: the flange passing the bracket's 50 mm mark, then clear of the brackets' ends.
 - SPLASH: a drop of water on the pad, or a pitch (side phone) or roll (front phone) over 15 degrees against a protractor at any time.
-- HARD: read the last 10 cm of the fall against the scale; any part of the pail's bottom (so its low edge as it slaps down too, not only the whole pail dropping) crossing any 10 mm in fewer than 8 frames (33 ms at 240 fps) is a fall faster than 0.3 m/s. This is the sim's hard-landing rule, read on a cheap phone video at a resolution of about 1 mm and 4 ms.
+- HARD (a hard landing): the speed over the last 5 mm before contact on the 240 fps side video: the bottom's lowest corner (the low edge as it slaps down too) taking fewer than 4 frames (17 ms) to cross its last 5 mm is over 0.3 m/s. A knock you can hear or a visible bounce is only a prompt to measure. A pail lowered fast and slowed before it touches is not HARD. Spillage: after the run, photograph the floor and the pail; water on the pad or floor, or a pitch or roll over 15 degrees, is a SPLASH.
 - DOWN: the pail resting on the pad past the tape line; within 10 degrees of level by a phone level app on the rim after the run; every part of both hands 30 mm clear and the pail still in the video's last second, against the scale. (The sim reads a lattice of points over the whole of each gripper, wrist link to fingertips, so a palm or wrist resting on the pail counts as touching, as in the real trial. The lattice is a box around the gripper, a little larger than its real housing, so it reads slightly conservative; no demo rests a palm on the pail, as the arm cannot reach such a pose here, so that reading is checked by its geometry, not by a run.)
 - DROPPED and tipped: by eye on the video.
 
@@ -121,7 +122,7 @@ Use water, never real waste. The underpad and towel catch any splash; keep the w
 - Bedside commode skills checklist for nursing assistants (Bryan University): 'Remove the receptacle from the commode and cover it. Close the commode lid', 'Take the receptacle to the bathroom', 'Empty and clean the receptacle per facility policy. Replace it in the commode.' https://src.bryanuniversity.edu/wp-content/uploads/Assist-w_-Bedside-Commode_Skills-Checklist.pdf
 - Where a used pan is set down: MEIKO, 'Cleaning bedpans instructions', Step 1: 'Best storage space: a side trolley, the floor with an underlay, the rubbish bin can if necessary (when standing securely)'; 'Never put it down on the patient's bed, bedside table or chair.' https://www.meiko.com/en-hk/news-press/magazine/cleaning-bedpans-instructions
 - Harrogate and District NHS Foundation Trust, 'Cleaning and disinfecting a commode or bed pan manually for Care Home settings' (2020): 'Cover commode pan with lid and carefully remove from the commode to avoid spillages.' https://www.infectionpreventioncontrol.co.uk/wp-content/uploads/2020/07/Cleaning-a-commode-pan-Care-Home-July-2020-Version-2.01-1.pdf
-- Bracket, pail and bail sizes, masses, frictions, and the 15 degree and 0.3 m/s splash limits: estimates.
+- Bracket, pail and bail sizes, masses, frictions, and the 15 degree and 0.3 m/s landing limits: estimates.
 
 O*NET text is from USDOL/ETA under CC BY 4.0; O*NET is a trademark of USDOL/ETA. Drive Medical, Zoro, Carewell and MEIKO are named for identification only; this task is not affiliated with them.
 

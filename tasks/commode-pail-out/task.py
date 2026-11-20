@@ -295,6 +295,8 @@ OBJECTS = [commode(), pail(), cover()]
 
 # -- the scorer ---------------------------------------------------------------------------------------------------------------------------------------------------------------------
 SPLASH_DEG, LAND_SPEED, DOWN_DEG = 15.0, 0.30, 10.0
+TOUCH = 0.010  # a corner of the bottom is armed again once it is over 10 mm up
+CONTACT = 0.002  # first floor contact: a corner of the bottom under 2 mm from the floor
 DOWN_STEPS = 20  # 1 s at 20 Hz
 RAIL_END = CX + RAIL_Y0  # the brackets' open front ends (world x)
 ZONE = RAIL_END - 0.04  # DOWN: the flange's back edge (world x) in front of this line
@@ -356,7 +358,8 @@ class Trial:
         self.dist, self.still, self.low = 9.0, False, 9.0
         self.down, self.n = False, 0
         self.tilt, self.peak = 0.0, 0.0
-        self.substeps, self.warned = 0, False
+        self.substeps, self.warned, self.land = 0, False, 0.0
+        self._pv, self._armed = None, np.ones(4, dtype=bool)
         self.parts = ((9.0, 9.0), (9.0, 9.0))
         if env is not None:
             self.step(env)
@@ -401,14 +404,22 @@ class Trial:
                   f"flags m{bool(self.moved)} d{self.drawn} o{self.out} S{bool(self.splash)} D{bool(self.dropped)} T{bool(self.tipped)} down{self.down}", flush=True)
 
     def _fall(self, h, low) -> None:
-        """HARD: once moved, any of the bottom's four corners falling faster than 0.3 m/s within 0.10 m of the floor (the corner's velocity is the pail's linear velocity plus its angular velocity cross the corner's arm), so a pail let go tipped on one edge that slaps flat is HARD."""
-        if not bool(self.moved) or low >= TOP + 0.10:
+        """HARD: the speed at first floor contact. Once moved, each bottom corner is armed while it is over 10 mm up; the first step it is under 2 mm from the floor, its downward speed (the pail's linear velocity plus its angular velocity cross the corner's arm; the larger of that step's and the step before's, as contact already slows it) over LAND_SPEED is a hard landing. A pail let go tipped on one edge that slaps flat is HARD; speed higher up does not count."""
+        if not bool(self.moved):
             return
         arm = h.to_world(BOTTOM_PTS) - h.pos
-        vz = float(np.min(h.lin_vel[2] + np.cross(h.ang_vel, arm)[:, 2]))
-        if vz < -LAND_SPEED:
-            self.hard.trip(True)
-            self.splash.trip(True)
+        z = h.to_world(BOTTOM_PTS)[:, 2] - TOP
+        vz = h.lin_vel[2] + np.cross(h.ang_vel, arm)[:, 2]
+        prev = vz if self._pv is None else self._pv
+        hit = self._armed & (z < CONTACT)
+        if bool(np.any(hit)):
+            v = float(-np.min(np.minimum(vz, prev)[hit]))
+            self.land = max(self.land, v)
+            if v > LAND_SPEED:
+                self.hard.trip(True)
+                self.splash.trip(True)
+        self._armed = (self._armed & ~(z < CONTACT)) | (z > TOUCH)
+        self._pv = vz
 
     def _hook(self, env) -> None:
         """Read the fall after every physics step too (a control step holds several): a low drop lasts a few tens of ms and slips between 20 Hz samples."""
@@ -480,15 +491,15 @@ OPEN_R, OPEN_L = -0.020, -0.016  # jaws 40 and 32 mm apart going in, under the f
 
 
 def report(tag):
-    print(f"[cp] {tag}: peak tilt {TRIAL.peak:.1f}, tilt {TRIAL.tilt:.1f}, moved {bool(TRIAL.moved)} drawn {TRIAL.drawn} out {TRIAL.out} splash {bool(TRIAL.splash)} dropped {bool(TRIAL.dropped)} tipped {bool(TRIAL.tipped)} hard {bool(TRIAL.hard)} down {TRIAL.down} (hand {TRIAL.dist:.3f} [hull L,R {TRIAL.parts[0][0]:.3f},{TRIAL.parts[0][1]:.3f} bail L,R {TRIAL.parts[1][0]:.3f},{TRIAL.parts[1][1]:.3f}] still {TRIAL.still} low {TRIAL.low:.3f})", flush=True)
+    print(f"[cp] {tag}: peak tilt {TRIAL.peak:.1f}, tilt {TRIAL.tilt:.1f}, moved {bool(TRIAL.moved)} drawn {TRIAL.drawn} out {TRIAL.out} splash {bool(TRIAL.splash)} dropped {bool(TRIAL.dropped)} tipped {bool(TRIAL.tipped)} hard {bool(TRIAL.hard)} landing {TRIAL.land:.3f} down {TRIAL.down} (hand {TRIAL.dist:.3f} [hull L,R {TRIAL.parts[0][0]:.3f},{TRIAL.parts[0][1]:.3f} bail L,R {TRIAL.parts[1][0]:.3f},{TRIAL.parts[1][1]:.3f}] still {TRIAL.still} low {TRIAL.low:.3f})", flush=True)
 
 
 def demo_script(ctx):
     """Modes: full (the right hand swings the bail up level under the front tube and draws the pail by it; the left takes the rim's front before the pail's centre reaches the brackets'
     ends and keeps it level; both draw it clear and set it down); none; one_hand (the right alone, by the bail, standing it up as soon as the front tube allows); drag (as one_hand, then dragged
-    along the floor); one_hand_rim (the right draws it 90 mm by the bail and lets the bail go; the left alone takes the rim's front strip, draws it out and sets it down); leave (drawn 100 mm by the bail and let go on the brackets); drop (as full, let go 12 cm over the floor); drop_low15 and drop_low19 (as full, let go 15 and 19 mm over the floor); hold_on (as full, but only the right lets go: the left keeps its pinch on the rim); tip_gentle (as tip_release with a 5 mm lift; must score 1.0); drag2 (as full to the set-down, both still holding, then dragged 10 cm along the floor, then let go); undo (as full to the set-down; both let go for 0.5 s, then the left takes
+    along the floor); one_hand_rim (the right draws it 90 mm by the bail and lets the bail go; the left alone takes the rim's front strip, draws it out and sets it down); leave (drawn 100 mm by the bail and let go on the brackets); drop (as full, let go 12 cm over the floor); drop_low15 and drop_low19 (as full, let go 15 and 19 mm over the floor); hold_on (as full, but only the right lets go: the left keeps its pinch on the rim); tip_gentle (as tip_release with a 5 mm lift; must score 1.0); slow_late (as full, but lowered fast to 40 mm up, braked to a stop, set down at 0.05 m/s at most, then eased level like full before letting go; must score 1.0); drag2 (as full to the set-down, both still holding, then dragged 10 cm along the floor, then let go); undo (as full to the set-down; both let go for 0.5 s, then the left takes
     the rim again and lifts it 8 cm and 20 cm back toward the brackets)."""
-    if ctx.mode not in ("full", "none", "one_hand", "one_hand_rim", "drag", "leave", "drop", "undo", "hold_on", "drop_low15", "drop_low19", "drag2", "tip_release", "tip_gentle"):
+    if ctx.mode not in ("full", "none", "one_hand", "one_hand_rim", "drag", "leave", "drop", "undo", "hold_on", "drop_low15", "drop_low19", "drag2", "tip_release", "tip_gentle", "slow_late"):
         raise ValueError(f"unknown mode {ctx.mode!r}")
     l, r = ctx.left, ctx.right
     if ctx.mode == "none":
@@ -577,12 +588,26 @@ def demo_script(ctx):
     yield from carry(ctx, -(D_OUT - drawn()), 0.0, 4.5, P)
     report("clear")
     gap = {"drop": 0.12, "drop_low15": 0.015, "drop_low19": 0.019}.get(ctx.mode, 0.002)
-    dz = -(low() - gap)
-    yield from carry(ctx, FLOOR_C[0] - P().pos[0], dz, 5.0, P)
+    if ctx.mode == "slow_late":  # as full to 80 mm up, then lowered fast to 40 mm up (about 0.3 m/s), braked to a stop, and set down at 0.05 m/s at most
+        yield from carry(ctx, FLOOR_C[0] - P().pos[0], -(low() - 0.08), 4.0, P)
+        yield from carry(ctx, 0.0, -(low() - 0.04), 0.25, P)
+        yield from l.wait(0.3)
+        yield from carry(ctx, 0.0, -(low() - gap), 1.2, P)
+    else:
+        dz = -(low() - gap)
+        yield from carry(ctx, FLOOR_C[0] - P().pos[0], dz, 5.0, P)
     report("set down")
     if ctx.mode not in ("drop", "drop_low15", "drop_low19"):  # the left's levelling trim pressed the pail's near corner into the floor (it rests 5 degrees rolled): ease the left off 1 mm a step until the pail lies flat, still held
         z = 0.0
         pl0 = l.at()
+        if ctx.mode == "slow_late":  # the fast descent leaves the pail's front up on the left's hold (pitched about 3 degrees): press the left down on it until the pail's pitch is under 1 degree
+            while abs(math.degrees(math.asin(float(np.clip(P().rotation()[2, 1], -1, 1))))) > 1.0 and z > -0.03:
+                z -= 0.001
+                l._solve(pl0 + np.array([0.0, 0.0, z]), l.grip.rot)
+                yield
+            yield from l.wait(0.3)
+            report(f"pressed {-z * 1000:.0f} mm")
+            z, pl0 = 0.0, l.at()
         while P().tilt_deg() > 1.0 and z < 0.04:
             z += 0.001
             l._solve(pl0 + np.array([0.0, 0.0, z]), l.grip.rot)
