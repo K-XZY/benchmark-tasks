@@ -66,20 +66,36 @@ TAPE_W = 0.015
 
 # -- the food: (length along x, width, height, mass kg, start x, start y); masses are cooked portions (estimates)
 FOOD = {
-    "steak": (0.160, 0.100, 0.022, 0.270, 0.38, -0.245),  # a rump steak, 16 x 10.3 x 2.2 cm (8.3 cm across 3 cm from its narrow end), its fat edge along one side
+    "steak": (0.150, 0.082, 0.022, 0.270, 0.38, -0.245),  # a sirloin steak, 15 x 8.2 x 2.2 cm (7.1 cm at its narrow end, 9.3 at its wide end), its fat edge along one side
     "hotdog": (0.160, 0.060, 0.050, 0.100, 0.38, -0.36),
-    "wing_a": (0.095, 0.043, 0.030, 0.060, 0.29, -0.53),  # whole wings: drumette, flat and tip joined, 9.5 x 4.3 cm; 3 cm clear of the pans' shared wall
-    "wing_b": (0.095, 0.043, 0.030, 0.060, 0.29, -0.64),
-    "roll": (0.076, 0.076, 0.050, 0.045, 0.41, -0.57),  # a round crusty bread roll, 7.6 cm across
+    "wing_a": (0.095, 0.043, 0.030, 0.060, 0.37, -0.49),  # whole wings: drumette, flat and tip joined, 9.5 x 4.3 cm; near the pans' shared wall
+    "wing_b": (0.095, 0.043, 0.030, 0.060, 0.32, -0.575),
+    "roll": (0.076, 0.076, 0.050, 0.045, 0.27, -0.497),  # a round crusty bread roll, 7.6 cm across
 }
 STEAK_TAPER = 0.13  # the steak's width grows this fraction from its centre to its +x end (and shrinks as much to its -x end)
+
+# -- the serving tongs: 12 in (30.5 cm) stainless spring utility tongs, scalloped tips (Vollrath 4781230 class); their own frame has the hinge at
+# the origin, the arms along -y, opening along x, the tips' width along z
+ARM_T, ARM_W, TIP_W = 0.0025, 0.020, 0.030  # arms 20 mm wide, modelled 2.5 mm thick (real about 1 mm); scalloped tips 30 mm wide
+ROOT = (0.0075, -0.006)  # where each arm leaves the hinge block
+TIP_C = (0.054, -0.290)  # the centre of each tip's rounded end, the tongs open: tips 10.8 cm apart (the maker's open width); 30.5 cm long
+TIP_LEN = 0.055  # the flat scalloped tip
+HINGE_R = 0.010
+TONG_MASS = (0.090, 0.080)  # the arm with the hinge, and the other: 170 g
+SPRING = 8.0  # N m/rad at the hinge (estimate, as the 9 in tongs of hotdog-roller-tongs): about 9 N at the tips squeezed shut
+CLOSE_DEG = 18.5  # the free arm's travel toward closed: at the stop the tips meet (the arms' own contact, as a joint limit)
+GRIP_Y = -0.115  # the hand holds the tongs by the handle, 11.5 cm from the hinge: the arms 5.5 cm across there, open
+TONGS_AT = np.array([0.46, -0.10])  # the hinge, the tongs lying on their arms' edges, tips toward -x
+TONGS_YAW = -90.0
+TOWEL = ((0.135, 0.485), (-0.163, -0.037), 0.008)  # a folded cotton bar towel under them, 35 x 12.6 cm: the open tongs lie wholly on it
 
 # -- the scorer's settings
 CLEAR_H = 0.05  # the plate's lowest point at least this high: held clear
 ON_H = 0.008  # an item's centre this high above the plate's floor plane
 LET_GO = 0.008  # every gripper point (fingers, palm, housing, wrist) at least 8 mm off the plate and the items
 REST_TOL = 0.003  # a plate point within 3 mm of a surface rests on it
-HOLD_TOUCH = 0.004  # held: a gripper point within 4 mm of the plate's surface
+HOLD_TOUCH = 0.006  # held: a gripper point within 6 mm of the plate's modelled surface (a pinched rim reads 4.4 mm: the rim's rounded section)
+HAND_TOUCH = 0.004  # a gripper point within 4 mm of an item's surface: the hand touched the food, which then never counts as served
 STILL_V = 0.03  # m/s
 FLAT_DEG = 6.0
 DROP_V = 0.45  # m/s: a free fall from 1 cm
@@ -102,6 +118,10 @@ LOOKS = {
     "crust": m.Look(color=m.rgb(0.70, 0.43, 0.17), roughness=0.75),
     "flour": m.Look(color=m.rgb(0.90, 0.84, 0.70), roughness=0.95),
     "crumb": m.Look(color=m.rgb(0.95, 0.89, 0.72), roughness=0.9),
+    "tong": m.Look(color=m.rgb(0.72, 0.73, 0.75), metallic=0.9, roughness=0.3),
+    "brushed": m.Look(color=m.rgb(0.62, 0.63, 0.65), metallic=0.85, roughness=0.45),
+    "towel": m.Look(color=m.rgb(0.90, 0.90, 0.86), roughness=0.95),
+    "stripe": m.Look(color=m.rgb(0.20, 0.35, 0.65), roughness=0.95),
 }
 
 
@@ -259,6 +279,14 @@ def _wing():
     return parts, m.join(drum, flat, tip, knob, joint).v
 
 
+def _hotdog(lx, wy, h):
+    """A hot dog in its bun with a line of mustard; the collider takes in the frank on top of the bun."""
+    body = _slab(lx - 0.012, wy, h * 0.72, 0.75)
+    dog = m.cylinder(0.013, lx + 0.01, (0, 0, h * 0.72 + 0.002), axis="x")
+    mus = m.box((lx * 0.8, 0.006, 0.004), (0, 0, h * 0.72 + 0.014))
+    return [("bun", body, "bun"), ("dog", dog, "sausage"), ("mustard", mus, "mustard")], m.join(body, dog).v
+
+
 ROLL_PROFILE = [(0.0, 0.0), (0.032, 0.0), (0.036, 0.005), (0.038, 0.014), (0.036, 0.026), (0.030, 0.037), (0.020, 0.045), (0.009, 0.049), (0.0, 0.050)]
 
 
@@ -278,11 +306,7 @@ def _food(name):
     if name == "steak":
         parts, hull = _steak(lx, wy, h)
     elif name == "hotdog":
-        body = _slab(lx - 0.012, wy, h * 0.72, 0.75)
-        dog = m.cylinder(0.013, lx + 0.01, (0, 0, h * 0.72 + 0.002), axis="x")
-        mus = m.box((lx * 0.8, 0.006, 0.004), (0, 0, h * 0.72 + 0.014))
-        parts = [("bun", body, "bun"), ("dog", dog, "sausage"), ("mustard", mus, "mustard")]
-        hull = m.join(body, dog).v  # the hot dog's collider takes in the frank on top of the bun
+        parts, hull = _hotdog(lx, wy, h)
     elif name.startswith("wing"):
         parts, hull = _wing()
     else:  # the bread roll
@@ -294,7 +318,86 @@ def _food(name):
                   friction=(0.5, 0.45), torsional_patch=0.01)
 
 
-OBJECTS = [_plate(), _stack(), _pan("pan_a"), _pan("pan_b"), _mat()] + [_food(n) for n in FOOD]
+# -- the tongs: a free mechanism, the frame one arm with the hinge, the other arm on a sprung hinge -------------------------------------------------
+
+ARM_ANGLE = math.atan2(TIP_C[0] - ROOT[0], -(TIP_C[1] - ROOT[1]))  # each arm's angle off the tongs' axis, open
+ARM_S = math.hypot(TIP_C[0] - ROOT[0], TIP_C[1] - ROOT[1])  # from the hinge block to the tip's round end's centre
+TIP_R = TIP_W / 2
+
+
+def _arm_local(side: float):
+    """One arm in the tongs' frame at joint zero, as meshes. side -1: the frame's arm (tip at -x), +1: the free one."""
+    end = ARM_S + TIP_R
+    plate0 = end - TIP_LEN
+    pieces = []
+    for a, b in ((0.0, 0.08), (0.08, 0.16), (0.16, plate0 + 0.002)):
+        pieces.append(m.box((ARM_T, b - a, ARM_W), (0.0, -(a + b) / 2, 0.0)))
+    th = np.linspace(math.pi / 2, 3 * math.pi / 2, 13)
+    outline = [(-plate0, -TIP_R), (-plate0, TIP_R)] + [(-ARM_S + TIP_R * math.cos(t), TIP_R * math.sin(t)) for t in th]
+    tip = m.prism(outline, -ARM_T / 2, ARM_T / 2)
+    pieces.append(m.Mesh(tip.v[:, [2, 0, 1]], tip.f))
+    beta = side * ARM_ANGLE
+    return [pc.turned(math.degrees(beta), "z").moved((side * ROOT[0], ROOT[1], 0.0)) for pc in pieces]
+
+
+def tip_local(side: float, q: float = 0.0, pts=None) -> np.ndarray:
+    """Points on a tip's inner face in the tongs' frame, the free arm turned `q` rad: by default a grid over the whole flat tip and its round end."""
+    if pts is None:
+        plate0 = ARM_S + TIP_R - TIP_LEN
+        pts = [(s, z) for s in np.linspace(plate0, ARM_S, 7) for z in np.linspace(-TIP_R, TIP_R, 7)]
+        pts += [(ARM_S + TIP_R * math.cos(a), TIP_R * math.sin(a)) for a in np.linspace(-1.3, 1.3, 9)]
+    beta = side * ARM_ANGLE
+    dvec = np.array([math.sin(beta), -math.cos(beta)])
+    nvec = np.array([math.cos(beta), math.sin(beta)])
+    root = np.array([side * ROOT[0], ROOT[1]])
+    out = np.array([(*(root + s * dvec - side * nvec * (ARM_T / 2)), z) for s, z in pts])
+    if side > 0 and q:
+        c, sn = math.cos(q), math.sin(q)
+        out = out @ np.array([[c, -sn, 0], [sn, c, 0], [0, 0, 1]]).T
+    return out
+
+
+def _tongs():
+    a_pieces, b_pieces = _arm_local(-1.0), _arm_local(1.0)
+    loop = m.cylinder(HINGE_R, TIP_W, (0.0, 0.0, 0.0))
+    ring = m.tube([(0.0, 0.004, -0.008), (0.0, 0.020, -0.006), (0.0, 0.026, 0.0), (0.0, 0.020, 0.006), (0.0, 0.004, 0.008)], 0.0015, 8)
+    frame_parts = [(f"arm_a{i}", pc, "tong") for i, pc in enumerate(a_pieces)] + [("hinge", loop, "brushed"), ("lock_ring", ring, "tong")]
+    frame_cols = [m.col_hull(f"arm_a{i}_c", pc) for i, pc in enumerate(a_pieces)] + [m.col_cylinder("hinge_c", HINGE_R, TIP_W)]
+    com_b = tuple(tip_local(1.0, 0.0, [(0.5 * ARM_S, 0.0)])[0])
+    jaw = m.hinge("jaw", "Z", (0.0, 0.0, 0.0), -CLOSE_DEG, 0.0, [(f"arm_b{i}", pc, "tong") for i, pc in enumerate(b_pieces)],
+                  [m.col_hull(f"arm_b{i}_c", pc) for i, pc in enumerate(b_pieces)], mass=TONG_MASS[1], spring=SPRING, damping=0.01, effort=5.0,
+                  friction=0.0, armature=1e-4, gravity=True, com=com_b, inertia=(4.0e-4, 8.0e-6, 4.0e-4))
+    z0 = TOWEL[2] + TIP_R
+    return m.mechanism("tongs", (TONGS_AT[0], TONGS_AT[1], TOP + z0), [jaw], LOOKS, frame_parts=frame_parts, frame_colliders=frame_cols,
+                       friction=(0.8, 0.7), solver_iters=64, free_mass=TONG_MASS[0], frame_inertia=(5.0e-4, 1.0e-5, 5.0e-4), yaw_deg=TONGS_YAW)
+
+
+def _towel():
+    (x0, x1), (y0, y1), h = TOWEL
+    parts = [("towel", m.box((x1 - x0, y1 - y0, h), ((x0 + x1) / 2, (y0 + y1) / 2, h / 2)), "towel")]
+    for k, yy in enumerate((y0 + 0.012, y1 - 0.012)):
+        parts.append((f"stripe{k}", m.box((x1 - x0 + 0.001, 0.008, h + 0.001), ((x0 + x1) / 2, yy, h / 2)), "stripe"))
+    return m.fixed("towel", (0.0, 0.0, TOP), parts, [m.col_box("towel_c", (x1 - x0, y1 - y0, h), ((x0 + x1) / 2, (y0 + y1) / 2, h / 2))], LOOKS,
+                   friction=(0.9, 0.8))
+
+
+def tong_points(tongs) -> np.ndarray:
+    """Points over the whole tongs (both arms' faces and edges every 7 mm, both tips, the hinge), station frame (z from the floor)."""
+    q = tongs.joint("jaw")
+    arm = [(s, z) for s in np.linspace(0.0, ARM_S + TIP_R, 44) for z in (-ARM_W / 2, 0.0, ARM_W / 2)]
+    loc = np.vstack([tip_local(-1.0, 0.0, arm), tip_local(1.0, q, arm), tip_local(-1.0), tip_local(1.0, q), [[0.0, 0.0, 0.0], [0.0, 0.026, 0.0]]])
+    return tongs.to_world(loc)
+
+
+def tip_ref(tongs) -> np.ndarray:
+    """The midpoint of the two tips' round-end centres, station frame: what the demo steers."""
+    q = tongs.joint("jaw")
+    a = tongs.to_world(tip_local(-1.0, 0.0, [(ARM_S, 0.0)]))[0]
+    b = tongs.to_world(tip_local(1.0, q, [(ARM_S, 0.0)]))[0]
+    return (a + b) / 2
+
+
+OBJECTS = [_plate(), _stack(), _pan("pan_a"), _pan("pan_b"), _mat(), _towel(), _tongs()] + [_food(n) for n in FOOD]
 
 
 
@@ -341,7 +444,7 @@ def gripper_points(opening: float) -> np.ndarray:
     # the palm and housing box's whole surface on a grid of about 6 mm, so a touch anywhere on it reads under 4.5 mm (the let-go gap is 8 mm)
     xs, ys, zs = np.linspace(-0.05, 0.05, 17), np.linspace(-0.033, 0.033, 12), np.linspace(-0.01, 0.064, 13)
     palm = [(x, y, z) for x in xs for y in ys for z in zs if x in (xs[0], xs[-1]) or y in (ys[0], ys[-1]) or z in (zs[0], zs[-1])]
-    fingers = [(sx * (opening + 0.0045), y, z) for sx in (-1.0, 1.0) for y in np.linspace(-0.018, 0.018, 7) for z in np.linspace(0.06, 0.147, 16)]
+    fingers = [(sx * (opening + 0.0045), y, z) for sx in (-1.0, 1.0) for y in np.linspace(-0.018, 0.018, 13) for z in np.linspace(0.06, 0.147, 30)]  # a 3 mm grid: a pad on the rim reads under 2.2 mm
     return np.array(palm + fingers)
 
 
@@ -423,9 +526,11 @@ class Trial:
 
     def reset(self, env=None) -> None:
         self.steps = 0
+        self.void_why = ""
         self.void = gk.Latch("food was on the plate while the plate rested on something, before all five were served onto it held clear")
         self.served = False
         self.lost = {n: gk.Latch(f"{n} fell to the counter or the stack after leaving its pan") for n in FOOD}
+        self.handled = {n: gk.Latch(f"a gripper touched the {n}: served by hand, not with the tongs") for n in FOOD}
         self.end = gk.EndHold(HOLD_STEPS)
         self.score = 0.0
         self.report: dict = {}
@@ -439,8 +544,10 @@ class Trial:
         rests, on_stk = plate_rests(plate)
         tilt = plate.tilt_deg()
 
+        tp = tong_points(m.state(env, "tongs"))
         on = {}
         gaps = {}
+        tg = {}
         anything = False
         for n in FOOD:
             it = m.state(env, n)
@@ -451,18 +558,20 @@ class Trial:
             inside = bool(rad.max() <= R_EDGE and ctr[2] >= ON_H and np.hypot(ctr[0], ctr[1]) <= R_EDGE)
             d = float(hull_gap(FOOD_PLANES[n], it.to_local(hands)).min())
             gaps[n] = float(d)
+            tg[n] = float(hull_gap(FOOD_PLANES[n], it.to_local(tp)).min())  # the tongs still on it: not yet let go
             # dropped: low over the counter, outside every pan, and not on the plate
             low_it = float(w[:, 2].min() - TOP)
             anything = anything or inside
             gone = not inside and ((low_it <= 0.012 and not in_pan_xy(it.pos)) or any(on_stack(q, 0.012) for q in w))
             self.lost[n].trip(bool(gone))
+            self.handled[n].trip(bool(d <= HAND_TOUCH))
             speed = float(np.linalg.norm(it.lin_vel))
-            on[n] = bool(inside and not self.lost[n] and d >= LET_GO and speed <= 0.2)
+            on[n] = bool(inside and not self.lost[n] and not self.handled[n] and d >= LET_GO and tg[n] >= LET_GO and speed <= 0.2)
         # an item under the plate that touches it holds the plate up: the plate rests on it (a plate propped on the food in a pan is not held)
         rests = rests or any(float(plate.to_local(m.state(env, n).pos[None])[0][2]) < 0.0 and plate_gap(plate, m.state(env, n).to_world(FOOD_V[n])).min() <= REST_TOL
                              for n in FOOD if not on[n])
         pg = plate_gap(plate, hands)
-        # held clear: resting on nothing, its lowest point at least 5 cm up, and a gripper touching it (within 4 mm)
+        # held clear: resting on nothing, its lowest point at least 5 cm up, and a gripper touching it (within 6 mm)
         clear = bool(low >= CLEAR_H and not rests and pg.min() <= HOLD_TOUCH)
         all_on = all(on.values())
 
@@ -471,6 +580,8 @@ class Trial:
         # than a free fall from 1 cm gives (h = v^2 / 2g), held or not
         v_pts = plate.lin_vel + np.cross(plate.ang_vel, pw - plate.pos)
         dropped = bool(float(v_pts[:, 2].min()) < -DROP_V)
+        if not self.void and ((rests and anything and not self.served) or dropped):
+            self.void_why = f"step {self.steps}: " + ("dropped, %.2f m/s down" % -float(v_pts[:, 2].min()) if dropped else "food on it while it rests, on_stack %s, low %.1f mm" % (on_stk, 1000 * low))
         self.void.trip(bool((rests and anything and not self.served) or dropped))
         failed = bool(self.void)
 
@@ -479,7 +590,9 @@ class Trial:
         off_stack = bool(clear or (not on_stk and math.hypot(pc[0] - PLATE_START[0], pc[1] - PLATE_START[1]) >= 2 * R_EDGE))
         # in the zone: the whole plate inside the tape line (seen from above), resting on the pad, flat
         in_zone = bool(abs(pc[0] - MAT_C[0]) <= MAT_HALF - R_EDGE and abs(pc[1] - MAT_C[1]) <= MAT_HALF - R_EDGE and low <= MAT_H + REST_TOL and tilt <= FLAT_DEG)
-        let_go = bool(pg.min() >= LET_GO and min(gaps.values()) >= LET_GO)
+        # let go: both grippers and the tongs 8 mm or more off the plate and every item
+        tong_gap = min([float(plate_gap(plate, tp).min())] + list(tg.values()))
+        let_go = bool(pg.min() >= LET_GO and min(gaps.values()) >= LET_GO and tong_gap >= LET_GO)
         still = bool(max([float(np.linalg.norm(plate.lin_vel))] + [float(np.linalg.norm(m.state(env, n).lin_vel)) for n in FOOD]) <= STILL_V)
 
         if failed:
@@ -496,7 +609,7 @@ class Trial:
         held = self.end.count >= HOLD_STEPS  # the delivered state now, and unbroken for the last 2 s
         self.score = 1.0 if held else tier
         self.report = {"step": self.steps, "score": self.score, "tier": tier, "low_mm": round(1000 * low, 1), "tilt": round(tilt, 1), "rests": rests,
-                       "on": on, "lost": [n for n in FOOD if self.lost[n]], "void": bool(self.void), "in_zone": in_zone, "off_stack": off_stack, "on_stack": on_stk, "let_go": let_go,
+                       "on": on, "lost": [n for n in FOOD if self.lost[n]], "handled": [n for n in FOOD if self.handled[n]], "tong_gap_mm": round(1000 * tong_gap, 1), "void": bool(self.void), "void_why": self.void_why, "in_zone": in_zone, "off_stack": off_stack, "on_stack": on_stk, "let_go": let_go,
                        "tip_gap_mm": round(1000 * float(pg.min()), 1), "down_mps": round(-float(v_pts[:, 2].min()), 2)}
         if self.steps % 20 == 0:
             d = os.environ.get("PLATE_SCORE_DIR", "plate_scores")
@@ -539,7 +652,8 @@ ROLL = os.environ.get("PLATE_ROLL", "1") == "1"  # the left jaws roll to the tip
 LIFT = float(os.environ.get("PLATE_LIFT", "0.065"))  # the plate is lifted this far straight up off the stack and held there for loading
 HIGH = float(os.environ.get("PLATE_HIGH", "0.24"))  # the right hand carries each item this high above the counter: the held plate's rim is at about 16 cm
 LEVEL = os.environ.get("PLATE_LEVEL", "1") == "1"  # the left wrist levels the held plate by its observed tilt, before loading and after each item
-CARRY_Y = float(os.environ.get("PLATE_CARRY_Y", "-0.06"))  # after the lift, the left hand brings the plate this far along y, toward the serving hand
+CARRY_Y = float(os.environ.get("PLATE_CARRY_Y", "-0.12"))  # after the lift, the left hand brings the plate this far along y, toward the serving hand
+HOLD_DOWN = float(os.environ.get("PLATE_HOLD_DOWN", "0.0"))  # and lowers it this far: none, so a press on the held plate does not bring its foot down onto the stack
 CARRY_UP = float(os.environ.get("PLATE_CARRY_UP", "0.08"))  # the loaded plate is raised this far before it is carried to the mat
 SET_P1 = float(os.environ.get("PLATE_SET_P1", "10"))  # deg: the fingers pitch down this far, pinched, so the far edge meets the mat first
 SET_P2 = float(os.environ.get("PLATE_SET_P2", "25"))  # deg: and this far, open, by the time the plate lies flat, so the housing stays off the counter
@@ -561,86 +675,22 @@ def level_plate(ctx, arm, steps=3, tol_deg=1.5):
         yield from arm.wait(0.3)
 
 
-MODES = ("full", "none", "set_down", "stack_prop", "idle_server", "roll_over_edge", "dropped_wing", "no_handoff", "drop_on_mat")
+MODES = ("full", "none", "set_down", "stack_prop", "idle_server", "roll_over_edge", "dropped_wing", "no_handoff", "drop_on_mat", "bare_hands",
+         "last_in_tongs", "latch_then_rest")
 
 
-def demo_script(ctx):
-    """Right: press the top plate's far rim down so its near rim tips up off the plate below. Left: level jaws round the raised near rim, pinch, lift.
-    Right: five items from the pans onto the held plate. Left: set the plate on the mat."""
+def serve_bare(ctx, mode):
+    """The old bare-gripper serve (a lazy route now: the fingers touch the food)."""
     import demokit as d
 
     l, r = ctx.left, ctx.right
-    mode = ctx.mode
-    if mode not in MODES:
-        raise ValueError(f"unknown mode {mode!r}")
-    for _ in range(5):
-        yield
-    if mode == "none":
-        yield from l.wait(2.0)
-        return
     up = np.array([0.0, 0.0, 1.0])
-    ua = np.array([math.cos(math.radians(PRESS_AZ)), math.sin(math.radians(PRESS_AZ)), 0.0])
-    a0 = np.array([math.cos(math.radians(GRIP_PHI)), math.sin(math.radians(GRIP_PHI)), 0.0])
-    pl = ctx.state("plate")
-    far = pl.pos + 0.120 * ua + np.array([0.0, 0.0, TOP_PROFILE[-2][1]])
-    yield from r.move(far + 0.06 * up, grip=d.down(0), finger=d.FINGER_CLOSED, t=2.5, label="right: over the far rim")
-    yield from r.move(far + 0.015 * up, t=1.0, label="right: onto the far rim")
-    yield from r.press(-up, force=float(os.environ.get("PLATE_PF", "15")), max_travel=0.03, label="right: press the far rim down")
-    print("[plate] tipped", round(ctx.state("plate").tilt_deg(), 1), flush=True)
-    # the left hand: fingers level, the jaws closing up and down across the raised near rim, centred on the rim's height in the jaws
-    g = rim_grip(GRIP_PHI, float(os.environ.get("PLATE_PITCH", "0")), ctx.state("plate").rotation()[:, 2] if ROLL else None)
-    a = g.rot[:, 2]
-    def pinch_point():
-        p = ctx.state("plate")
-        under = p.to_world(np.array([[-0.107 * a0[0], -0.107 * a0[1], UNDER_PROFILE[2][1]]]))[0]
-        top = p.to_world(np.array([[-R_EDGE * a0[0], -R_EDGE * a0[1], TOP_PROFILE[-1][1]]]))[0]
-        edge = p.to_world(np.array([[-GRIP_R * a0[0], -GRIP_R * a0[1], 0.0]]))[0]
-        return np.array([edge[0], edge[1], 0.5 * (under[2] + top[2]) + float(os.environ.get("PLATE_ZOFF", "0"))])
-    tcp0 = pinch_point()
-    yield from l.move(tcp0 - BACK * a + 0.03 * up, grip=g, finger=-GAP / 2, t=3.0, label="left: beside the near rim")
-    yield from l.move(tcp0 - BACK * a, t=1.0, label="left: level with the rim")
-    yield from l.servo(tcp0 - BACK * a, tol=0.0015, timeout=1.0, label="left: level with the rim")
-    tcp0 = pinch_point()
-    yield from l.move(tcp0, t=1.5, label="left: fingers round the rim")
-    yield from l.servo(tcp0, tol=0.0015, timeout=1.0, label="left: fingers round the rim")
-    yield from l.close(0.0, float(os.environ.get("PLATE_SQ", "40")), t=0.8, label="left: pinch the rim")
-    yield from l.wait(0.3)
-    print("[plate] pinched", ctx.state("plate").pos, round(ctx.state("plate").tilt_deg(), 1), flush=True)
-    yield from r.move(r.tcp() + 0.06 * up, t=1.0, label="right: off the rim")  # from where the hand is: the press left its command below the rim
-    yield from l.wait(0.3)
-    yield from l.move(l.at() + LIFT * up, t=2.0, label="left: lift off the stack")
-    yield from l.wait(0.5)
-    if CARRY_Y:  # bring the held plate toward the serving hand
-        yield from l.move(l.at() + np.array([0.0, CARRY_Y, 0.0]), t=1.5, label="left: bring the plate to the pans")
-        yield from l.wait(0.5)
-    if LEVEL:  # the held plate sags and leans in the pinch: bring it level before the food goes on
-        yield from level_plate(ctx, l, steps=4)
-    print("[plate] held", ctx.state("plate").pos, round(ctx.state("plate").tilt_deg(), 1), TRIAL.report, flush=True)
-    if mode == "idle_server":  # the plate held up, the other hand never serves: 0.25
-        yield from l.wait(5.0)
-        return
-    if mode == "set_down":  # the plate put back on the stack and loaded there (as a one-armed server must), then lifted: void, 0
-        yield from l.move(l.at() - (LIFT - 0.002) * up, t=2.0, label="left: set the plate back on the stack")
-        yield from l.wait(0.5)
-    if mode == "stack_prop":  # held, but its foot propped on the stack's rim while it is loaded, then lifted: void, 0
-        pc = ctx.state("plate").pos
-        yield from l.move(l.at() + np.array([0.0, PLATE_START[1] - (FOOT_R + R_EDGE - 0.012) - pc[1], 0.0]), t=1.5, label="left: the plate beside the stack")
-        z0 = l.at()[2]
-        for _ in range(40):
-            if TRIAL.report.get("on_stack"):
-                break
-            yield from l.move(l.at() - 0.002 * up, t=0.1, label="left: lower the foot onto the stack's rim")
-        yield from l.move(l.at() - 0.003 * up, t=0.3, label="left: lean on the rim")
-        yield from l.wait(0.5)
-        print("[plate] propped", TRIAL.report, flush=True)
-
-    # -- the right hand: five items from the pans onto the held plate
     dr = d.down(0)
     # to lay an item on the plate, the fingers lean RT toward +y (about x), the jaws still closing along y: a straight-down grip does not reach there
     lean = d._as_grip(d.axis_angle_matrix(np.array([1.0, 0.0, 0.0]), math.radians(float(os.environ.get("PLATE_RT", "25")))) @ dr.rot)
     # the steak and the hot dog side by side across v, each finger of each lay clear of the item beside it; the bread roll (far, wide end) and one wing
     # (near, narrow end) on the steak's top; the other wing on the floor past the hot dog. Items are held off their centre where the jaws reach across:
-    # the steak by its narrow end (8.3 cm across there; the jaws open 9.4 cm), a wing by its drumette
+    # the steak by its narrow end (7.1 cm across there; the jaws open 9.4 cm), a wing by its drumette
     WINGV = float(os.environ.get("PLATE_WINGV", "0.059"))
     TOPZ = 0.012 + FOOD["steak"][2]
     # the leaning fingers carry each item 1 to 3 cm toward +v of the target (measured on GPU), so the targets sit that much toward -v of where
@@ -686,7 +736,232 @@ def demo_script(ctx):
         if LEVEL:
             yield from level_plate(ctx, l)
         print(f"[plate] {name} laid at {np.round(ctx.state('plate').to_local(ctx.state(name).pos[None])[0], 3)}: tilt {ctx.state('plate').tilt_deg():.1f}", TRIAL.report, flush=True)
-    yield from r.move(np.array([0.25, -0.30, TOP + 0.15]), t=1.5, label="right: clear")
+
+
+# -- the tongs in the hand ----------------------------------------------------------------------------------------------------------------------------
+
+GRIP_LOCAL = np.array([0.0, GRIP_Y, 0.006])  # the TCP on the tongs, in their frame: between the arms, 11.5 cm from the hinge
+REF_LOCAL = np.array([0.0, TIP_C[1], 0.0])  # the tips' round-end centres' midpoint, on the tongs' axis
+
+
+def _rot(axis, deg):
+    a = math.radians(deg)
+    c, s_ = math.cos(a), math.sin(a)
+    return {"x": np.array([[1, 0, 0], [0, c, -s_], [0, s_, c]]), "y": np.array([[c, 0, s_], [0, 1, 0], [-s_, 0, c]]),
+            "z": np.array([[c, -s_, 0], [s_, c, 0], [0, 0, 1]])}[axis]
+
+
+LIE = _rot("z", TONGS_YAW)  # the tongs where they lie: tips toward -x, opening along y
+TURN = _rot("y", -90.0)  # in the hand, the tongs turned from where they lay to tips straight down, opening along y
+PICK_TILT = 20.0  # the grip on the tongs where they lie: tilted this far from straight down toward their tips, the fingers closing across the arms
+# (the gripper turned over about its own axis: the unturned grip is past the right wrist's limits here; IK checked from READY)
+
+
+def pick_grip():
+    import demokit as d
+
+    return d.tilted(PICK_TILT, 180.0, flip=True)
+
+
+def held_grip():
+    """The grip that holds the tongs tips down: the pick turned with them (the fingers then point +x, 20 degrees down)."""
+    import demokit as d
+
+    return d._as_grip(TURN @ pick_grip().rot)
+
+
+REL = {"v": None}  # the tips' midpoint from the commanded TCP, in the held grip's frame, measured once the tongs are in hand
+
+
+def half_outer(tip_half: float) -> float:
+    """Half the arms' outside width at the grip when the tips' inner faces are `tip_half` off the axis (the finger command, negated)."""
+    f = (-GRIP_Y + ROOT[1]) / (-(TIP_C[1] - ROOT[1]))
+    return ROOT[0] + (tip_half + ARM_T / 2 - ROOT[0]) * f + ARM_T / 2
+
+
+def tcp_for(ref):
+    """The commanded TCP that puts the tips' midpoint at `ref`, the tongs held tips down (from where they sit in the hand, as measured)."""
+    g = held_grip().rot
+    rel = REL["v"] if REL["v"] is not None else g.T @ (TURN @ LIE @ (REF_LOCAL - GRIP_LOCAL))
+    return np.asarray(ref, float) - g @ rel
+
+
+def take_tongs(ctx, r):
+    """Down over the tongs where they lie, the fingers either side of the arms' handles 11.5 cm from the hinge; squeeze them shut; lift; turn
+    them tips down."""
+    t0 = ctx.state("tongs")
+    gp = t0.pos + t0.rotation() @ GRIP_LOCAL
+    print("[plate] tongs lie: hinge", np.round(t0.pos - [0, 0, TOP], 3), "tips", np.round(tip_ref(t0) - [0, 0, TOP], 3), "jaw", round(t0.deg("jaw"), 1), flush=True)
+    up_z = TOP + SEAT_Z + PLATE_H + 0.08  # clear of the stack's rim: from the press, go up first, then across, then down over the towel
+    yield from r.move(np.array([r.at()[0], r.at()[1], up_z]), t=1.0, label="right: up clear of the stack")
+    yield from r.move(np.array([gp[0], gp[1] - 0.02, up_z]), t=1.5, label="right: across over the towel")
+    yield from r.move(gp + [0.0, 0.0, 0.045], grip=pick_grip(), finger=-(half_outer(TIP_C[0]) + 0.012), t=2.5, label="right: over the tongs' handles")
+    yield from r.move(gp, t=1.4, label="right: fingers either side of the handles")
+    yield from r.move(r.at(), finger=-max(0.0, half_outer(ARM_T / 2) - 0.004), t=1.0, label="right: squeeze the handles: the tips shut")
+    yield from r.wait(0.3)
+    print("[plate] tongs squeezed: jaw", round(ctx.state("tongs").deg("jaw"), 1), "hinge", np.round(ctx.state("tongs").pos - [0, 0, TOP], 3),
+          "tcp", np.round(r.tcp() - [0, 0, TOP], 3), flush=True)
+    yield from r.move(gp + [0.0, 0.0, 0.04], t=1.0, label="right: lift the tongs")
+    yield from r.move(tcp_for(np.array([0.24, -0.30, TOP + 0.12])), grip=held_grip(), t=2.5, label="right: turn the tongs tips down")
+    yield from r.wait(0.4)
+    REL["v"] = held_grip().rot.T @ (tip_ref(ctx.state("tongs")) - r.at())
+    print("[plate] tongs in hand: tips at", np.round(tip_ref(ctx.state("tongs")) - [0, 0, TOP], 3), "jaw", round(ctx.state("tongs").deg("jaw"), 1),
+          "rel", np.round(REL["v"], 3), flush=True)
+
+
+# the tongs' serve: (name, the item's half width across the jaws at the grip point, the tips' lower end above the item's bottom, target (u, v, z
+# of the item's bottom in the plate's frame), the grip point in the item's frame (x, y), the squeeze past contact at the tips (m))
+TONG_ITEMS = [
+    ("steak", 0.041, 0.004, (0.010, -0.058, 0.012), (0.0, 0.0), 0.008),  # across its middle (8.2 cm): the open tips span 9.6 cm of their 10.8
+    ("hotdog", 0.030, 0.006, (0.010, 0.038, 0.012), (0.0, 0.0), 0.006),
+    ("roll", 0.038, 0.012, (0.050, -0.062, 0.012 + 0.022), (0.0, 0.0), 0.008),
+    ("wing_b", 0.016, 0.006, (-0.035, -0.058, 0.012 + 0.022), (-0.008, 0.004), 0.008),
+    ("wing_a", 0.016, 0.008, (0.0, 0.090, 0.012), (-0.008, 0.004), 0.008),
+]
+TONG_OPEN = float(os.environ.get("PLATE_TOPEN", "0.007"))  # the tips this far clear of each side of an item, coming down round it
+TONG_RELEASE = float(os.environ.get("PLATE_TREL", "0.004"))  # and eased this far clear to let it go
+TONG_HIGH = float(os.environ.get("PLATE_THIGH", "0.18"))  # the tips' lower end this high above the counter over the plate
+TONG_LOW = float(os.environ.get("PLATE_TLOW", "0.105"))  # and this high from the pan to beside the plate (the item clear of the pan walls)
+
+
+def serve_tongs(ctx, mode):
+    """Each item: tips opened round it, lowered beside it, closed on it, lifted, carried over the held plate, lowered, eased open, lifted."""
+    l, r = ctx.left, ctx.right
+    items = TONG_ITEMS
+    if mode == "roll_over_edge":  # the roll set on the rim, half past the plate's edge: 0.25
+        items = [it if it[0] != "roll" else ("roll", 0.038, 0.012, (0.0, -0.125, 0.0215), (0.0, 0.0), 0.008) for it in items]
+    if mode in ("set_down", "stack_prop"):
+        items = items[:2]
+    live = lambda: tip_ref(ctx.state("tongs"))  # noqa: E731
+    for name, hw, lowz, (u, v, zt), (gx, gy), sq in items:
+        def grip_ref():
+            it = ctx.state(name)
+            p = it.to_world(np.array([[gx, gy, 0.0]]))[0]
+            return np.array([p[0], p[1], p[2] + lowz + TIP_R])  # the round ends' centres: the lower end lowz above the item's bottom
+        for attempt in range(2 if (mode == "dropped_wing" and name == "wing_a") else 1):
+            g = grip_ref()
+            yield from r.move(tcp_for(g + [0.0, 0.0, 0.10]), finger=-half_outer(hw + TONG_OPEN), t=2.0, label=f"right: tongs over the {name}")
+            yield from r.servo(g + [0.0, 0.0, 0.10], read=live, tol=0.002, timeout=1.2, label=f"right: tips over the {name}")
+            yield from r.move(r.at() - [0.0, 0.0, 0.10], t=1.5, label=f"right: tips down round the {name}")
+            yield from r.servo(g, read=live, tol=0.0015, timeout=1.2, label=f"right: tips beside the {name}")
+            yield from r.move(r.at(), finger=-(half_outer(hw) - sq), t=0.8, label=f"right: close the tongs on the {name}")
+            yield from r.wait(0.3)
+            yield from r.move(r.at() + [0.0, 0.0, TOP + TONG_LOW - g[2] + TIP_R], t=1.2, label=f"right: lift the {name}")
+            if mode == "dropped_wing" and name == "wing_a" and attempt == 0:  # dropped on the counter on the way, picked up again: 0.25
+                yield from r.move(tcp_for(np.array([0.14, -0.40, TOP + 0.05])), t=2.0, label="right: over the counter")
+                yield from r.move(r.at(), finger=-half_outer(hw + TONG_OPEN), t=0.4, label="right: the wing drops")
+                yield from r.move(r.at() + [0.0, 0.0, 0.08], t=0.8, label="right: up")
+                yield from r.wait(0.8)
+        tw = ctx.state("plate").to_world(np.array([[u + gx, v + gy, zt]]))[0]
+        tgt = np.array([tw[0], tw[1], tw[2] + lowz + TIP_R + 0.004])
+        pc = ctx.state("plate").pos
+        yield from r.move(tcp_for(np.array([tgt[0], pc[1] - 0.20, TOP + TONG_LOW + TIP_R])), t=1.8, label=f"right: the {name} beside the plate")
+        high = TONG_HIGH + (0.05 if name == "wing_a" else 0.0)  # the last wing crosses the hot dog (its top about 19 cm up) on the way to the far side
+        yield from r.move(tcp_for(np.array([tgt[0], pc[1] - 0.20, TOP + high + TIP_R])), t=1.0, label=f"right: the {name} up over the rim")
+        yield from r.move(tcp_for(np.array([tgt[0], tgt[1], TOP + high + TIP_R])), t=1.5, label=f"right: the {name} over the plate")
+        yield from r.servo(np.array([tgt[0], tgt[1], TOP + high + TIP_R]), read=live, tol=0.003, timeout=1.0, label="right: over its place")
+        tw = ctx.state("plate").to_world(np.array([[u + gx, v + gy, zt]]))[0]
+        tgt = np.array([tw[0], tw[1], tw[2] + lowz + TIP_R + 0.004])
+        last = name == items[-1][0]
+        if last and mode == "latch_then_rest":  # the last item held 1 cm above its place, still in the tongs, then lifted away: 0
+            yield from r.move(r.at() + (tgt + [0.0, 0.0, 0.010] - live()), t=2.0, label=f"right: hold the {name} just over its place")
+            yield from r.wait(1.0)
+            yield from r.move(r.at() + [0.0, 0.0, 0.10], t=1.2, label=f"right: lift the {name} away, still in the tongs")
+            yield from r.move(tcp_for(np.array([tgt[0], pc[1] - 0.20, TOP + high + TIP_R])), t=1.5, label=f"right: the {name} beside the plate")
+            return
+        yield from r.move(r.at() + (tgt - live()), t=2.0, label=f"right: lay the {name}")
+        if last and mode == "last_in_tongs":  # the last item on the plate, the tongs never let it go: 0.25
+            print(f"[plate] {name} left in the tongs", TRIAL.report, flush=True)
+            return
+        yield from r.move(r.at(), finger=-half_outer(hw + TONG_RELEASE), t=0.5, label=f"right: ease the tongs off the {name}")
+        yield from r.move(r.at() + [0.0, 0.0, 0.08], t=1.0, label="right: tips up and clear")
+        if LEVEL:
+            yield from level_plate(ctx, l)
+        print(f"[plate] {name} laid at {np.round(ctx.state('plate').to_local(ctx.state(name).pos[None])[0], 3)}: tilt {ctx.state('plate').tilt_deg():.1f}", TRIAL.report, flush=True)
+
+
+def demo_script(ctx):
+    """Right: press the top plate's far rim down so its near rim tips up off the plate below. Left: level jaws round the raised near rim, pinch, lift.
+    Right: takes the tongs and serves five items from the pans onto the held plate with them. Left: set the plate in the zone."""
+    import demokit as d
+
+    l, r = ctx.left, ctx.right
+    mode = ctx.mode
+    if mode not in MODES:
+        raise ValueError(f"unknown mode {mode!r}")
+    for _ in range(5):
+        yield
+    if mode == "none":
+        yield from l.wait(2.0)
+        return
+    up = np.array([0.0, 0.0, 1.0])
+    ua = np.array([math.cos(math.radians(PRESS_AZ)), math.sin(math.radians(PRESS_AZ)), 0.0])
+    a0 = np.array([math.cos(math.radians(GRIP_PHI)), math.sin(math.radians(GRIP_PHI)), 0.0])
+    pl = ctx.state("plate")
+    far = pl.pos + 0.120 * ua + np.array([0.0, 0.0, TOP_PROFILE[-2][1]])
+    yield from r.move(far + 0.06 * up, grip=d.down(0), finger=d.FINGER_CLOSED, t=2.5, label="right: over the far rim")
+    yield from r.move(far + 0.015 * up, t=1.0, label="right: onto the far rim")
+    yield from r.press(-up, force=float(os.environ.get("PLATE_PF", "15")), max_travel=0.03, label="right: press the far rim down")
+    print("[plate] tipped", round(ctx.state("plate").tilt_deg(), 1), flush=True)
+    # the left hand: fingers level, the jaws closing up and down across the raised near rim, centred on the rim's height in the jaws
+    g = rim_grip(GRIP_PHI, float(os.environ.get("PLATE_PITCH", "0")), ctx.state("plate").rotation()[:, 2] if ROLL else None)
+    a = g.rot[:, 2]
+    def pinch_point():
+        p = ctx.state("plate")
+        under = p.to_world(np.array([[-0.107 * a0[0], -0.107 * a0[1], UNDER_PROFILE[2][1]]]))[0]
+        top = p.to_world(np.array([[-R_EDGE * a0[0], -R_EDGE * a0[1], TOP_PROFILE[-1][1]]]))[0]
+        edge = p.to_world(np.array([[-GRIP_R * a0[0], -GRIP_R * a0[1], 0.0]]))[0]
+        return np.array([edge[0], edge[1], 0.5 * (under[2] + top[2]) + float(os.environ.get("PLATE_ZOFF", "0"))])
+    tcp0 = pinch_point()
+    yield from l.move(tcp0 - BACK * a + 0.03 * up, grip=g, finger=-GAP / 2, t=3.0, label="left: beside the near rim")
+    yield from l.move(tcp0 - BACK * a, t=1.0, label="left: level with the rim")
+    yield from l.servo(tcp0 - BACK * a, tol=0.0015, timeout=1.0, label="left: level with the rim")
+    tcp0 = pinch_point()
+    yield from l.move(tcp0, t=1.5, label="left: fingers round the rim")
+    yield from l.servo(tcp0, tol=0.0015, timeout=1.0, label="left: fingers round the rim")
+    yield from l.close(0.0, float(os.environ.get("PLATE_SQ", "40")), t=0.8, label="left: pinch the rim")
+    yield from l.wait(0.3)
+    print("[plate] pinched", ctx.state("plate").pos, round(ctx.state("plate").tilt_deg(), 1), flush=True)
+    yield from r.move(r.tcp() + 0.06 * up, t=1.0, label="right: off the rim")  # from where the hand is: the press left its command below the rim
+    yield from l.wait(0.3)
+    yield from l.move(l.at() + LIFT * up, t=2.0, label="left: lift off the stack")
+    yield from l.wait(0.5)
+    if mode != "bare_hands":  # the right hand takes the tongs off the towel and turns them tips down
+        yield from take_tongs(ctx, r)
+    if CARRY_Y:  # bring the held plate toward the serving hand
+        yield from l.move(l.at() + np.array([0.0, CARRY_Y, -HOLD_DOWN]), t=1.5, label="left: bring the plate to the pans")
+        yield from l.wait(0.5)
+    if LEVEL:  # the held plate sags and leans in the pinch: bring it level before the food goes on
+        yield from level_plate(ctx, l, steps=4)
+    print("[plate] held", ctx.state("plate").pos, round(ctx.state("plate").tilt_deg(), 1), TRIAL.report, flush=True)
+    if mode == "idle_server":  # the plate held up, the other hand never serves: 0.25
+        yield from l.wait(5.0)
+        return
+    if mode == "set_down":  # the plate put back on the stack and loaded there (as a one-armed server must), then lifted: void, 0
+        yield from l.move(l.at() - (LIFT - 0.002) * up, t=2.0, label="left: set the plate back on the stack")
+        yield from l.wait(0.5)
+    if mode == "stack_prop":  # held, but its foot propped on the stack's rim while it is loaded, then lifted: 0.25 (the food slides off the tilted plate; void if it stays on)
+        pc = ctx.state("plate").pos
+        yield from l.move(l.at() + np.array([0.0, PLATE_START[1] - (FOOT_R + R_EDGE - 0.012) - pc[1], 0.0]), t=1.5, label="left: the plate beside the stack")
+        z0 = l.at()[2]
+        for _ in range(40):
+            if TRIAL.report.get("on_stack"):
+                break
+            yield from l.move(l.at() - 0.002 * up, t=0.1, label="left: lower the foot onto the stack's rim")
+        yield from l.move(l.at() - 0.003 * up, t=0.3, label="left: lean on the rim")
+        yield from l.wait(0.5)
+        print("[plate] propped", TRIAL.report, flush=True)
+
+    # -- the right hand: five items from the pans onto the held plate, with the tongs
+    if mode == "bare_hands":  # the bare fingers serve all five (the hand touches the food, which then never counts): 0
+        yield from serve_bare(ctx, mode)
+    else:
+        yield from serve_tongs(ctx, mode)
+    if mode == "last_in_tongs":  # held to the end, the last item still in the tongs on the plate
+        yield from l.wait(4.0)
+        return
+    if mode != "latch_then_rest":
+        yield from r.move(np.array([0.22, -0.30, TOP + 0.30]), t=1.5, label="right: tongs up and clear")
     if mode == "set_down":
         yield from l.move(l.at() + LIFT * up, t=2.0, label="left: lift the loaded plate")
     if mode == "stack_prop":
@@ -748,5 +1023,14 @@ def demo_script(ctx):
     back = l.grip.rot[:, 2] * np.array([1.0, 1.0, 0.0])
     yield from l.move(l.at() - 0.10 * back / np.linalg.norm(back), t=1.5, label="left: draw back")  # fingertips well outside the rim before going up
     yield from l.move(l.at() + np.array([0.0, 0.0, 0.10]), t=1.0, label="left: up")
+    if mode == "latch_then_rest":  # the last item laid only once the plate rests on the mat: void, 0
+        name, hw, lowz, (u, v, zt), (gx, gy), sq = TONG_ITEMS[-1]
+        tw = ctx.state("plate").to_world(np.array([[u + gx, v + gy, zt]]))[0]
+        tgt = np.array([tw[0], tw[1], tw[2] + lowz + TIP_R + 0.004])
+        hi = float(tip_ref(ctx.state("tongs"))[2])
+        yield from r.move(tcp_for(np.array([tgt[0], tgt[1], hi])), t=2.5, label=f"right: the {name} over the plate on the mat")
+        yield from r.move(r.at() + (tgt - tip_ref(ctx.state("tongs"))), t=2.0, label=f"right: lay the {name} on the resting plate")
+        yield from r.move(r.at(), finger=-half_outer(hw + TONG_RELEASE), t=0.5, label=f"right: ease the tongs off the {name}")
+        yield from r.move(r.at() + [0.0, 0.0, 0.08], t=1.0, label="right: tips up and clear")
     yield from l.wait(3.0)
     print("[plate] end:", TRIAL.report, flush=True)
