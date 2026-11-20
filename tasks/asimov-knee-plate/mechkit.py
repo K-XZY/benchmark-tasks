@@ -525,10 +525,11 @@ def free(name: str, pos, parts, colliders, looks, mass: float, friction=(0.9, 0.
                 build=lambda: _file(_root_name(name), '"PhysicsRigidBodyAPI", "PhysicsMassAPI"', "", _visual(parts) + "".join(colliders), looks, friction))
 
 
-def mechanism(name: str, pos, links, looks, frame_parts=(), frame_colliders=(), yaw_deg: float = 0.0, friction=(1.2, 1.0), solver_iters: int = 32, start=(), free_mass: float | None = None, start_quat: tuple | None = None,
+def mechanism(name: str, pos, links, looks, frame_parts=(), frame_colliders=(), yaw_deg: float = 0.0, friction=(1.2, 1.0), solver_iters: int = 32, start=(), self_collisions: bool = False, free_mass: float | None = None, start_quat: tuple | None = None,
               frame_inertia: tuple = (0.01, 0.01, 0.01)) -> Part:
     """An articulation: a frame, with `frame_parts` and `frame_colliders`, and each `Link` on its joint. `start` gives (link name, joint value) to differ from joint zero at a reset.
     The frame is fixed in place, unless `free_mass` gives it a mass in kg: it then stands free on what is under it, and needs colliders. `start_quat`, xyzw, starts a free one in any rotation.
+    `self_collisions` turns on collisions between the links of the mechanism that a joint does not join (a limb folding against its body; README 20).
     `frame_inertia` is the frame's principal inertia along the part's x, y, z (kg m^2); the default suits a fixed frame, not a free slender one (README, 16)."""
     links = tuple(links)
     world_joint = "" if free_mass is not None else f"""
@@ -552,7 +553,7 @@ def mechanism(name: str, pos, links, looks, frame_parts=(), frame_colliders=(), 
 {"".join(_link_usda(k) for k in links)}
 {world_joint}{"".join(_joint_usda(k) for k in links)}"""
         attrs = f"""
-    bool physxArticulation:enabledSelfCollisions = 0
+    bool physxArticulation:enabledSelfCollisions = {int(self_collisions)}
     int physxArticulation:solverPositionIterationCount = {solver_iters}
     int physxArticulation:solverVelocityIterationCount = 1"""
         return _file(_root_name(name), '"PhysicsArticulationRootAPI", "PhysxArticulationAPI"', attrs, body, looks, friction)

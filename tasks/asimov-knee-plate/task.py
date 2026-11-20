@@ -35,12 +35,13 @@ import mechkit as m  # noqa: E402
 
 HERE = pathlib.Path(__file__).resolve().parent
 SCENE = "station"
-INSTRUCTION = "Turn the leg over on the table until the knee's bearing faces up, then fit the knee side plate: seat it flat in its pocket on the knee housing with its boss in the thigh's bearing and all nine holes over their inserts, leave the leg on its back, and move both hands clear."
+INSTRUCTION = "Turn the leg onto its back, then seat the knee side plate flush in its pocket with its nine bolt holes over their inserts, and move both hands clear."
 SUCCESS_HOLD_S = 0.0  # the scorer counts its own 1 s hold
 HOLD_STEPS = 20
 TOP = d.TABLE_TOP
 TRACE = os.environ.get("KNEE_TRACE", "1") != "0"
 GATE = os.environ.get("KNEE_GATE", "")
+START = os.environ.get("KNEE_START", "")  # debug only: "seated" starts with the leg on its back and the plate seated
 
 Z = np.load(HERE / "knee_plate.npz")  # meshes and colliders in the plate frame: origin on the boss axis at the plate's outer face, z out of the housing, x toward the narrow end
 
@@ -50,6 +51,12 @@ LOOKS = {
     "thigh": m.Look(m.rgb(0.36, 0.37, 0.39), metallic=0.5, roughness=0.45),
     "steel": m.Look(m.rgb(0.72, 0.72, 0.74), metallic=0.95, roughness=0.25),
     "pom": m.Look(m.rgb(0.92, 0.92, 0.89), roughness=0.5),  # the kitting post, acetal
+    "brass": m.Look(m.rgb(0.78, 0.62, 0.30), metallic=0.9, roughness=0.35),  # the heat-set inserts
+    "bolt": m.Look(m.rgb(0.80, 0.80, 0.82), metallic=0.4, roughness=0.3),  # the M3 flat bolts, bright steel
+    "socket": m.Look(m.rgb(0.02, 0.02, 0.02), roughness=0.9),  # the bolts' hex sockets
+    "tray": m.Look(m.rgb(0.20, 0.38, 0.62), roughness=0.7),  # the bolt holder, printed PLA
+    "drv_red": m.Look(m.rgb(0.75, 0.08, 0.06), roughness=0.5),  # the screwdriver's handle
+    "drv_black": m.Look(m.rgb(0.06, 0.06, 0.07), roughness=0.8),  # its band
 }
 
 
@@ -69,7 +76,6 @@ def _quat_xyzw(R: np.ndarray) -> tuple:
 # -0.19564 from left_hip_yaw_joint, along its y; here 49.25 mm under the face), so the bearing stays on the pocket's axis at any knee angle.
 # The URDF's flexion (0 to 1.50 rad) turns the housing about the plate frame's -z: here the joint runs 0 to -1.50 rad.
 THIGH_KG, HOUSING_KG = 1.949, 1.080
-LEG_KG = THIGH_KG + HOUSING_KG
 THIGH_COM, THIGH_I = (-0.07536, 0.00108, -0.05032), (0.00145, 0.00364, 0.00380)  # URDF, in the plate frame's axes
 HOUSING_COM, HOUSING_I = (0.10431, -0.00021, -0.05043), (0.00176, 0.00866, 0.00868)
 KNEE_AT = (0.0, 0.0, -0.04925)
@@ -117,7 +123,7 @@ LEVEL_TOL = 10.0  # degrees: the face within this of level (on its back it rests
 REST_TOL = 0.012  # m: the face's origin within this of its height on its back: the leg lies on the table, not held up
 SLIDE_TOL = 0.015  # m: the leg moves less than this from where it lay when the plate first reached the pocket's mouth
 ROCK_TOL = 3.0  # degrees: and its face turns less than this from how it lay then (pressed at the plate's edge it rocks 2 onto its other three points)
-LEG0 = os.environ.get("KNEE_LEG0", "back" if GATE in ("seated", "drop", "press", "back") else "side")
+LEG0 = os.environ.get("KNEE_LEG0", "back" if (GATE in ("seated", "drop", "press", "back") or START == "seated") else "side")
 
 POST = np.array([0.20, -0.17])
 POST_H, POST_R, SOCKET_R, SOCKET_D = 0.030, 0.025, 0.018, 0.012  # an acetal kitting post, 50 mm across, 30 mm tall, with a 36 mm socket 12 mm deep
@@ -199,7 +205,7 @@ def _leg():
         R, o = R_BACK, O_BACK + [0.0, 0.0, 0.0005]
     else:
         R, o = R_SIDE, O_SIDE + [0.0, 0.0, 0.0005]
-    knee = m.hinge("knee", "Z", KNEE_AT, KNEE_LO, 0.0, [("housing", _mesh("housing"), "pa12")],
+    knee = m.hinge("knee", "Z", KNEE_AT, KNEE_LO, 0.0, [("housing", _mesh("housing"), "pa12")] + _insert_parts(),
                    _hulls("lc", [i for i in range(int(Z["n_lc"])) if i not in BEARING_HULLS]) + _housing_colliders(),
                    mass=HOUSING_KG, spring=PIN_K, damping=PIN_D, effort=STATIC, friction=0.0, armature=ARMATURE, gravity=True, com=HOUSING_COM, inertia=HOUSING_I)
     part = m.mechanism("leg", tuple(o), [knee], LOOKS, frame_parts=[("thigh", _mesh("thigh"), "thigh"), ("bearing", _bearing(), "steel")],
@@ -230,9 +236,103 @@ def _post():
     return m.fixed("post", (POST[0], POST[1], TOP), [("post", m.lathe(prof, 48), "pom")], cols, LOOKS, friction=(MU, MU))
 
 
+# -- the fasteners (Menlo, Left Leg Step 8, instruction 5: "Take 9 of M3x10 Flat bolts and lightly tighten into all the holes on part 600_08A
+# to align it with part 600_10C", then each out, threadlocker, and back in, in a star order) ----------------------------------------------------
+# The bolts: DIN 7991 M3x10 (Menlo's part id m3-x-x-10mm-din-7991; a flat bolt is measured overall, head included): 3.0 mm thread, 0.5 mm pitch,
+# head 6.0 mm across and 1.7 mm tall at 90 degrees, 2 mm hex socket. Seated, the head fills the plate's countersink (6.72 mm across, 90 degrees,
+# from the STEP) and 5 mm of thread reaches into the insert. The inserts: brass M3 heat-set inserts in the housing's nine insert bores (the STEP:
+# 4.4 mm across, 4.5 mm deep under a 0.5 mm lead-in, from 5.5 to 10 mm under the face), so modelled 4.4 mm across and 4.5 mm long with the M3
+# thread's 2.5 mm minor bore. The bolts stand head up in a printed holder; a screwdriver lies beside it (below). Both are props: nothing in the task uses them.
+BOLT_L, BOLT_D, BOLT_HEAD_D, BOLT_HEAD_K, BOLT_HEX = 0.010, 0.003, 0.006, 0.0017, 0.002
+INSERT_D, INSERT_ID, INSERT_TOP, INSERT_BOT = 0.0044, 0.0025, -0.0055, -0.0100
+HOLDER = np.array([0.17, 0.03])  # the bolt holder on the table, between the arms, clear of the leg and the plate's path
+HOLDER_W, HOLDER_H, HOLDER_PITCH = 0.040, 0.008, 0.012  # a printed block 40 x 40 x 8 mm with nine bolts standing in it on a 12 mm grid
+SIT = 0.016  # a bolt standing in the holder, tip down in its 3.2 mm hole: its head's top is this high, 8 mm above the block, the head and 6.3 mm of thread proud
+
+# The screwdriver: a Wiha SoftFinish 356 hex screwdriver, 2.0 x 60 mm (item 32265; Wiha's catalogue): 164 mm overall, a 60 mm blade, a 23 mm handle,
+# 25 g by the catalogue. It lies on the table beside the bolt holder, a prop like the bolts: nothing in the task picks it up or reads it.
+# Modelled: a lathed handle (red, with a black band) and a 2.0 mm hexagonal bar for the blade; the handle's profile is an estimate from the
+# maker's photographs.
+DRV_KG, DRV_L, DRV_BLADE, DRV_R = 0.025, 0.164, 0.060, 0.0115  # 25 g, 164 mm overall, 60 mm blade, the handle's 23 mm across
+DRV_AT, DRV_YAW = np.array([0.12, -0.06]), 75.0  # the driver's middle on the table (m) and its heading from +x (deg): between the arms, clear of the leg and the plate's path
+
+
+def _revolve(profile, n: int = 24, closed: bool = False) -> m.Mesh:
+    """A surface of revolution about z from (radius, z) points; `closed` joins the last point to the first (a tube's section)."""
+    pts = list(profile) + ([profile[0]] if closed else [])
+    th = np.linspace(0.0, 2 * math.pi, n, endpoint=False)
+    v = np.array([(r * math.cos(a), r * math.sin(a), z) for r, z in pts for a in th])
+    f = []
+    for i in range(len(pts) - 1):
+        for k in range(n):
+            a, b, c, e = i * n + k, i * n + (k + 1) % n, (i + 1) * n + (k + 1) % n, (i + 1) * n + k
+            f += [(a, b, c), (a, c, e)]
+    return m.Mesh(v, np.array(f, int))
+
+
+def _moved(mesh, R=np.eye(3), t=(0.0, 0.0, 0.0)) -> m.Mesh:
+    return m.Mesh(np.asarray(mesh.v, float) @ np.asarray(R, float).T + np.asarray(t, float), mesh.f)
+
+
+def _bolt_mesh() -> m.Mesh:
+    """DIN 7991 M3x10, the head's top at z 0, the tip at -10 mm."""
+    r, hr = BOLT_D / 2, BOLT_HEAD_D / 2
+    return _revolve([(1e-5, -BOLT_L), (r - 0.00025, -BOLT_L), (r, -BOLT_L + 0.00025), (r, -BOLT_HEAD_K), (hr, -0.0002), (hr, 0.0), (1e-5, 0.0)])
+
+
+def _hexagon(across_flats: float) -> list:
+    rc = across_flats / math.sqrt(3.0)
+    return [(rc * math.cos(math.pi / 6 + k * math.pi / 3), rc * math.sin(math.pi / 6 + k * math.pi / 3)) for k in range(6)]
+
+
+def _insert_parts() -> list:
+    """The nine brass inserts, in the housing's frame (the plate frame at the knee's zero), each on its hole's axis."""
+    tube = _revolve([(INSERT_D / 2, INSERT_BOT), (INSERT_D / 2, INSERT_TOP), (INSERT_ID / 2, INSERT_TOP), (INSERT_ID / 2, INSERT_BOT)], closed=True)
+    return [(f"insert{i}", _moved(tube, t=(float(x), float(y), 0.0)), "brass") for i, (x, y) in enumerate(np.asarray(Z["holes"], float))]
+
+
+def _bolts():
+    """The nine bolts standing head up in their holder (each head a collider the bit touches)."""
+    parts = [("holder", m.box((HOLDER_W, HOLDER_W, HOLDER_H), (0.0, 0.0, HOLDER_H / 2)), "tray")]
+    cols = [m.col_box("c_holder", (HOLDER_W, HOLDER_W, HOLDER_H), (0.0, 0.0, HOLDER_H / 2))]
+    bolt, sock = _bolt_mesh(), m.prism(_hexagon(BOLT_HEX), -0.0012, 0.0001)
+    for i in range(9):
+        x, y = _slot(i)
+        parts += [(f"bolt{i}", _moved(bolt, t=(x, y, SIT)), "bolt"), (f"socket{i}", _moved(sock, t=(x, y, SIT)), "socket")]
+        cols.append(m.col_cylinder(f"c_head{i}", BOLT_HEAD_D / 2, BOLT_HEAD_K, (x, y, SIT - BOLT_HEAD_K / 2)))
+        cols.append(m.col_cylinder(f"c_shank{i}", BOLT_D / 2, SIT - BOLT_HEAD_K - HOLDER_H, (x, y, HOLDER_H + (SIT - BOLT_HEAD_K - HOLDER_H) / 2)))
+    return m.free("bolts", (HOLDER[0], HOLDER[1], TOP + 0.0005), parts, cols, LOOKS, mass=0.028, friction=(MU, MU))  # one body: the printed holder (about 19 g) with its nine bolts (0.5 g each) standing in it
+
+
+def _slot(i: int) -> tuple:
+    """Slot i of the holder (holder frame): rows along x, from the far row."""
+    return HOLDER_PITCH * (i % 3 - 1), HOLDER_PITCH * (1 - i // 3)
+
+
+def _octagon(circumradius: float, scale: float = 1.0) -> list:
+    """A regular octagon with a flat at local +x, -x, +y and -y (the handle's section)."""
+    return [(scale * circumradius * math.cos(math.radians(22.5 + 45 * k)), scale * circumradius * math.sin(math.radians(22.5 + 45 * k))) for k in range(8)]
+
+
+def _driver():
+    """The Wiha 356 hex screwdriver, lying on the table on a flat of its octagonal handle (it cannot roll), the blade clear of the table:
+    its frame at the handle's butt, its axis +z toward the blade; start_quat lays it down with a flat (local -x) on the table."""
+    hl = DRV_L - DRV_BLADE  # the handle's length, 104 mm
+    flat = DRV_R * math.cos(math.radians(22.5))  # the handle's flat, this far from its axis
+    parts = [("handle", m.prism(_octagon(DRV_R), 0.0, hl), "drv_red"),
+             ("band", m.prism(_octagon(DRV_R, 1.03), 0.030, 0.060), "drv_black"),
+             ("ferrule", m.lathe([(0.0, hl - 0.002), (0.0050, hl - 0.002), (0.0050, hl + 0.006), (0.0, hl + 0.006)], 24), "steel"),
+             ("blade", m.prism(_hexagon(0.002), hl, DRV_L), "steel")]
+    cols = [m.col_hull("c_handle", m.prism(_octagon(DRV_R), 0.0, hl)), m.col_box("c_blade", (0.002, 0.002, DRV_BLADE), (0.0, 0.0, hl + DRV_BLADE / 2))]
+    ax = np.array([math.cos(math.radians(DRV_YAW)), math.sin(math.radians(DRV_YAW)), 0.0])
+    R = _rz(DRV_YAW) @ gk.rot((0.0, 1.0, 0.0), 90.0)  # local z to the heading, local -x down
+    butt = np.array([DRV_AT[0], DRV_AT[1], TOP + flat + 0.0002]) - ax * DRV_L / 2
+    return m.free("driver", tuple(butt), parts, cols, LOOKS, mass=DRV_KG, friction=(0.8, 0.7), start_quat=_quat_xyzw(R))
+
+
 def _plate_start():
     """Where the plate starts: on the post; or, for the gates (the leg on its back), seated or dropped over the pocket."""
-    if GATE in ("seated", "press"):
+    if GATE in ("seated", "press") or START == "seated":
         return tuple(O_BACK), _quat_xyzw(R_BACK)
     if GATE == "drop":
         dx, dy, h, tilt, yaw = (float(v) for v in os.environ.get("KNEE_DROP", "0,0,7,0,0").split(","))
@@ -243,11 +343,41 @@ def _plate_start():
 
 def _plate():
     pos, q = _plate_start()
-    return m.free("plate", pos, [("plate", _mesh("plate"), "alu")], _hulls("pc"), LOOKS, mass=PLATE_KG, friction=(MU, MU), torsional_patch=0.015,
+    parts = [("plate", _mesh("plate"), "alu")]
+    return m.free("plate", pos, parts, _hulls("pc"), LOOKS, mass=PLATE_KG, friction=(MU, MU), torsional_patch=0.015,
                   solver_iters=64, start_quat=q)
 
 
-OBJECTS = [_leg(), _post(), _plate()]
+OBJECTS = [_leg(), _post(), _plate(), _bolts(), _driver()]
+
+
+def size_check() -> list:
+    """The scene's key sizes, measured from the meshes it uses, against the maker's figures: (what, scene mm, published mm, source)."""
+    pv, hv, H = np.asarray(Z["plate_v"], float), np.asarray(Z["housing_v"], float), np.asarray(Z["holes"], float)
+    rp = np.hypot(pv[:, 0] - H[0, 0], pv[:, 1] - H[0, 1])
+    rh = np.hypot(hv[:, 0] - H[0, 0], hv[:, 1] - H[0, 1])
+    near_hole = (rh < 0.0030) & (hv[:, 2] < -0.00549) & (hv[:, 2] > -0.01001)  # under the 0.5 mm lead-in
+    bolt = _bolt_mesh()
+    bv = np.asarray(bolt.v, float)
+    rows = [
+        ("plate 600_08A thickness", 1000 * (pv[:, 2].max() - pv[(np.hypot(pv[:, 0], pv[:, 1]) > 0.025), 2].min()), 5.0, "600_08A STEP"),
+        ("plate length", 1000 * (pv[:, 0].max() - pv[:, 0].min()), 149.4, "600_08A STEP"),
+        ("plate hole", 2000 * rp[(rp < 0.0017) & (pv[:, 2] < -0.002)].max(), 3.2, "600_08A STEP"),
+        ("plate countersink, top", 2000 * rp[(rp < 0.004) & (pv[:, 2] > -0.0001)].max(), 6.72, "600_08A STEP"),
+        ("insert bore in housing 600_10C", 2000 * rh[near_hole].max(), 4.4, "600_10C STEP"),
+        ("insert, outside / bore / length", f"{1000 * INSERT_D:.1f} / {1000 * INSERT_ID:.1f} / {1000 * (INSERT_TOP - INSERT_BOT):.1f}", "4.4 / 2.5 / 4.5", "600_10C STEP bore; M3 minor diameter"),
+        ("holes and inserts (count)", str(len(H)), 9, "Menlo heat-insert drawing, 600_10C, inserts 1 to 9"),
+        ("bolt length overall", 1000 * (bv[:, 2].max() - bv[:, 2].min()), 10.0, "Step 8: M3x10 Flat bolt, DIN 7991"),
+        ("bolt thread / head / head height", f"{1000 * BOLT_D:.1f} / {1000 * BOLT_HEAD_D:.1f} / {1000 * BOLT_HEAD_K:.1f}", "3.0 / 6.0 / 1.7", "DIN 7991 M3"),
+        ("bolt hex socket", 1000 * BOLT_HEX, 2.0, "DIN 7991 M3"),
+        ("bolts (count)", "9", 9, "Step 8, instruction 5"),
+        ("screwdriver: length / blade / handle", f"{1000 * DRV_L:.0f} / {1000 * DRV_BLADE:.0f} / {2000 * DRV_R:.0f}", "164 / 60 / 23", "Wiha SoftFinish 356, 2.0 x 60 (32265)"),
+        ("screwdriver mass", f"{1000 * DRV_KG:.0f}", "25", "Wiha 32265"),
+    ]
+    for what, got, want, src in rows:
+        unit = "" if "(count)" in what else " g" if "mass" in what else " mm"
+        print(f"[size] {what}: scene {got if isinstance(got, str) else f'{got:.2f}'}{unit}, published {want}{unit} ({src})", flush=True)
+    return rows
 
 
 class Pin:
@@ -317,10 +447,11 @@ def knee_now(env) -> dict:
     return {"h": rim[:, 2], "off": float(np.hypot(axis[0], axis[1])), "axis": axis, "holes": float(np.max(np.hypot(holes[:, 0] - HOLES[:, 0], holes[:, 1] - HOLES[:, 1]))),
             "yaw": yaw, "tilt": tilt, "tips": m.fingertips(env), "outline": s.to_world(OUTLINE), "ring": o + CLEAR_RING @ R.T, "speed": float(np.linalg.norm(s.lin_vel)),
             "z": float(s.pos[2]), "xy": s.pos[:2].copy(), "face": face, "o": o, "leg_speed": float(np.linalg.norm(leg.lin_vel)), "leg_spin": float(np.linalg.norm(leg.ang_vel)),
-            "ends": np.vstack([o + R @ CALF, leg.to_world(THIGH_END)]), "line": np.vstack([leg.to_world(THIGH_END), o + R @ KNEE_C, o + R @ CALF])}
+            "ends": np.vstack([o + R @ CALF, leg.to_world(THIGH_END)]), "line": np.vstack([leg.to_world(THIGH_END), o + R @ KNEE_C, o + R @ CALF]),
+            }
 
 
-LADDER = gk.Ladder(("turned", 0.25), ("entered", 0.5), ("flush", 0.75), ("done", 1.0))
+LADDER = gk.Ladder(("turned", 0.25), ("entered", 0.5), ("flush", 0.75), ("done", 1.0))  # the four rungs of the scoring text
 
 
 class Trial:
@@ -375,21 +506,25 @@ class Trial:
         mouth = turned and st["off"] <= ON_AXIS and h.max() <= MOUTH_H and h.min() >= -0.001 and st["tilt"] < 20.0  # boss down: a flipped plate (tilt 180) reads nothing
         entered = mouth and h.max() <= ENTER_H
         flush = entered and np.abs(h).max() <= FLUSH_H and st["tilt"] < 1.0
-        clear = gk.hands_clear(st["tips"], [st["outline"], st["ring"]], HANDS_CLEAR) and gk.hands_clear(st["tips"], [st["line"]], LEG_CLEAR)
+        seated = flush and st["holes"] <= HOLE_TOL
+        clear = (gk.hands_clear(st["tips"], [st["outline"], st["ring"]], HANDS_CLEAR) and gk.hands_clear(st["tips"], [st["line"]], LEG_CLEAR))
         still = st["speed"] < STILL and st["leg_speed"] < LEG_STILL and st["leg_spin"] < LEG_SPIN
-        done = flush and st["holes"] <= HOLE_TOL and clear and still
-        return {"turned": turned, "entered": entered, "flush": flush, "done": done}
+        out = {"turned": turned, "entered": entered, "flush": flush, "seated": seated}
+        out["done"] = seated and clear and still
+        return out
 
     def score(self) -> float:
         if self.now is None:
             return 0.0
         r = self.reached(self.now)
         r["done"] = self.full and r["done"]  # the 1 s hold was met, and now: seated, hands clear, plate and leg still
+        above = ["flush", "seated", "done"]
         if (self.early or self.slid) and not GATE:
-            r["flush"] = r["done"] = False
-        if not (GATE or self.lifted):  # a plate that no gripper ever lifted from the post (thrown, tapped, dropped from far) scores at most 0.5
-            r["flush"] = r["done"] = False
-        return LADDER.score(r, failed=bool(self.fell))
+            r.update({k: False for k in above})
+        if not (GATE or self.lifted or START == "seated"):  # a plate that no gripper ever lifted from the post (thrown, tapped, dropped from far) scores at most 0.5
+            r.update({k: False for k in above})
+        names = {n for n, _ in LADDER.rungs}
+        return LADDER.score({k: v for k, v in r.items() if k in names}, failed=bool(self.fell))
 
 
 TRIAL = Trial()
@@ -397,10 +532,13 @@ m.on_step(TRIAL.step)
 m.on_reset(TRIAL.reset)
 
 
+UNDO = {"on": False}  # the undo route runs on past the seat, so success must not end it there
+
+
 def success(objects) -> bool:
-    if GATE:  # the gates watch the plate for their whole length
+    if GATE or UNDO["on"]:  # the gates watch the plate for their whole length; the undo goes on to put a hand back on the plate
         return False
-    return bool(TRIAL.full and TRIAL.lifted and not TRIAL.early and not TRIAL.slid and TRIAL.score() >= 1.0 and not TRIAL.fell)
+    return bool(TRIAL.full and (TRIAL.lifted or START == "seated") and not TRIAL.early and not TRIAL.slid and TRIAL.score() >= 1.0 and not TRIAL.fell)
 
 
 def score(objects) -> float:
@@ -410,7 +548,10 @@ def score(objects) -> float:
 # -- the demo ------------------------------------------------------------------------------------------------------------------------------------
 
 PINCH_X = 0.062  # the pinch across the neck's flats (39.4 mm apart), this far along the plate from the boss's axis
-RELEASE_H = float(os.environ.get("KNEE_RELEASE", "0.0065"))  # let go with the plate this far above seated: its underside 1.5 mm over the face
+REGRIP_DEG = float(os.environ.get("KNEE_REGRIP_DEG", "8.0"))  # the plate tilted more than this in the vertical pinch (4 to 5 when pinched square): put it in the socket and pinch again
+PRESSES = 6  # press until the plate reads flush at every rim point, at most this many times
+PICK_OPEN = -0.030  # the fingers 60 mm apart coming down over the neck: 10 mm either side of its 39.4 mm, and the outer finger clear of the leg lying beside the post
+RELEASE_H = float(os.environ.get("KNEE_RELEASE", "0.00575"))  # let go with the plate this far above seated: its underside 0.75 mm over the face, the fingertips at the face beside the neck
 PRESS_X = float(os.environ.get("KNEE_PRESS_X", "0.010"))  # press here on the plate's top, between the boss's axis and its centre of mass
 PRESS_DEPTH = float(os.environ.get("KNEE_PRESS_DEPTH", "0.020"))  # the fingertips sent this far below flush
 RELEASE_TOL = float(os.environ.get("KNEE_RELEASE_TOL", "0.00012"))
@@ -428,8 +569,15 @@ def _tips(env, side: str = "right") -> np.ndarray:
     return t[0::2].mean(axis=0)
 
 
+def _tips_all(env) -> np.ndarray:
+    """The right hand's six fingertip points."""
+    return m.fingertips(env)[12:24][0::2]
+
+
 def _check_frame(env):
     """The knee's sign against the simulator's own pose of the housing (once, in the gates and the demo)."""
+    if getattr(env, "unwrapped", None) is None or getattr(env.unwrapped, "scene", None) is None:  # pathcheck's dry run: no simulator
+        return
     asset = env.unwrapped.scene["leg"]
     i = asset.body_names.index("knee")
     pose = asset.data.body_link_pose_w[0, i].detach().cpu().numpy().astype(float)
@@ -446,13 +594,54 @@ def _leg_report(env, label: str) -> None:
           f"knee {math.degrees(leg.joint('knee')):.2f} deg, leg speed {1000 * st['leg_speed']:.1f} mm/s, spin {st['leg_spin']:.3f} rad/s", flush=True)
 
 
+DIAG = os.environ.get("KNEE_DIAG", "") == "1"
+
+
+def _diag(env, arm, label: str) -> None:
+    """KNEE_DIAG=1: the held plate against the pocket (axis offset, height, tilt about the pocket's x and y, yaw), the hand commanded against
+    observed, and each fingertip's height above the face and where it is in the pocket's frame."""
+    if not DIAG:
+        return
+    s, leg = m.state(env, "plate"), m.state(env, "leg")
+    R, o = pocket(leg)
+    a = (s.pos - o) @ R
+    Rp = R.T @ s.rotation()
+    rx = math.degrees(math.atan2(Rp[2, 1], Rp[2, 2]))
+    ry = math.degrees(math.asin(float(np.clip(-Rp[2, 0], -1.0, 1.0))))
+    yaw = math.degrees(math.atan2(Rp[1, 0], Rp[0, 0]))
+    cmd = d.ik.tcp_pose(arm.q, arm.base)[0]
+    lag = arm.tcp() - cmd
+    t = m.fingertips(env)
+    tp = (t[12:24][0::2] - o) @ R  # the right hand's six fingertip points, pocket frame
+    tl = (t[0:12][0::2] - o) @ R
+    sheet = (t[12:24][0::2] - s.pos) @ s.rotation()  # the same, in the plate's frame
+    print(f"[diag] {label}: plate axis {np.round(1000 * a[:2], 2)} mm, h {1000 * a[2]:.2f} mm, tilt x {rx:.2f} y {ry:.2f} yaw {yaw:.2f} deg, speed {1000 * np.linalg.norm(s.lin_vel):.1f} mm/s; "
+          f"hand lag {np.round(1000 * lag, 1)} mm (obs-cmd), trim {np.round(1000 * arm.trim, 1)}; right tips z over face {np.round(1000 * tp[:, 2], 1)} at x {np.round(1000 * tp[:, 0], 0)} y {np.round(1000 * tp[:, 1], 0)}; "
+          f"tips in plate frame z {np.round(1000 * sheet[:, 2], 1)}; left tips min z over face {1000 * tl[:, 2].min():.0f}", flush=True)
+
+
+def _props(env) -> dict:
+    return {n: (np.asarray(m.state(env, n).pos, float).copy(), m.state(env, n).rotation().copy()) for n in ("driver", "bolts")}
+
+
+def _props_moved(env, p0) -> str:
+    """Each prop's start and end pose (x y z in mm, heading in deg) and how far it travelled."""
+    out = []
+    for n, (pos, R) in p0.items():
+        s = m.state(env, n)
+        end = np.asarray(s.pos, float)
+        ang = math.degrees(math.acos(float(np.clip((np.trace(R.T @ s.rotation()) - 1.0) / 2.0, -1.0, 1.0))))
+        out.append(f"{n} start {np.round(1000 * pos, 2)} end {np.round(1000 * end, 2)} mm, travel {1000 * float(np.linalg.norm(end - pos)):.2f} mm, turned {ang:.2f} deg")
+    return "; ".join(out)
+
+
 def demo_script(ctx):
     """Modes: full: both hands grip the leg's ends from above (the right the calf's end, the left the thigh's top end), and turn it together
     over its lower edge, toward the robot, until it lies on its back, then let go; the right hand pinches the plate across its neck, lifts it
-    out of the post's socket, brings it over the pocket square and turned to it, lets go 1.5 mm above the face, and presses it home; then both
+    out of the post's socket, brings it over the pocket square and turned to it, lets go 0.75 mm above the face, and presses it home; then both
     hands clear. turn: the turn alone, then a report. gate: the arms wait (KNEE_GATE=press: the leg on its back and the plate seated, a push
     of KNEE_PUSH newtons at the boss for 2 s, then KNEE_PUSH2 at the plate's side, KNEE_PUSH_Y off the axis, for 2 s; the leg's motion after
-    each). none: the arms wait."""
+    each). none: the arms wait. undo: full, then the right hand back on the seated plate's top to the end (the score falls to 0.75)."""
     l, r = ctx.left, ctx.right
     env = ctx.emb._env
     mode = ctx.mode
@@ -491,9 +680,13 @@ def demo_script(ctx):
                   f"end: leg moved {1000 * np.linalg.norm(st['o'] - o0):.2f} mm, face {st['face']:.3f} deg from up, rim {1000 * st['h'].min():.3f} to {1000 * st['h'].max():.3f} mm above the face, "
                   f"boss axis off {1000 * st['off']:.3f} mm, holes off {1000 * st['holes']:.3f} mm, tilt {st['tilt']:.3f} deg; score {TRIAL.score()}", flush=True)
         return
-    if mode not in ("full", "turn"):
+    if mode not in ("full", "turn", "undo"):
         raise ValueError(f"unknown mode {mode!r}")
+    UNDO["on"] = mode == "undo"
     _check_frame(env)
+    size_check()
+    yield from r.wait(1.0)  # the props settle onto the table before their pose is read
+    props0 = _props(env)
     # 1. the turn. Each hand comes down over one end of the leg, its fingers either side of that end's thickness (the leg lies on its side, the
     # face toward +x, so the thickness runs along x), and closes. Then both swing together about the edge the leg rests on, toward the robot:
     # the leg tips over that edge onto its back, held all the way, so it is lowered, not dropped
@@ -505,7 +698,7 @@ def demo_script(ctx):
     yield from ctx.together(r.move(gr + [0.0, 0.0, 0.10], grip=d.down(90), finger=d.FINGER_OPEN, t=2.5, label="over the calf's end"),
                             l.move(gl + [0.0, 0.0, 0.05], grip=d.down(-90), finger=d.FINGER_OPEN, t=2.5, label="over the thigh's end"))
     yield from ctx.together(r.move(gr, t=1.5, label="fingers either side of the calf's end"), l.move(gl, t=1.0, label="fingers either side of the thigh's end"))
-    yield from ctx.together(r.close(0.059, force=45.0, t=0.6, label="grip the calf's end"), l.close(0.060, force=45.0, t=0.6, label="grip the thigh's end"))
+    yield from ctx.together(r.close(0.059, force=38.0, t=0.6, label="grip the calf's end"), l.close(0.060, force=38.0, t=0.6, label="grip the thigh's end"))
     yield from ctx.together(r.arc(edge_p, edge_u, -TURN_DEG, t=TURN_T, label="turn the leg over its edge"), l.arc(edge_p, edge_u, -TURN_DEG, t=TURN_T, label="turn the leg over its edge"))
     yield from r.wait(0.5)
     _leg_report(env, f"turned {TURN_DEG:.0f} deg, held")
@@ -522,13 +715,80 @@ def demo_script(ctx):
     # 2. the plate: pinch it across its neck and lift it out of the post's socket
     at = lambda p: plate().to_world(np.array([p]))[0]  # noqa: E731  (a plate-frame point in the world, as the plate is now)
     tips = lambda: _tips(env)  # noqa: E731
+    def pd(label):
+        """KNEE_DIAG=1: the plate on or over the post: its tilt from level, its origin from where it sits in the socket, its yaw from the post's,
+        and the right fingertips in its frame."""
+        if not DIAG:
+            return
+        Rw = plate().rotation()
+        tp = (_tips_all(env) - plate().pos) @ Rw
+        yaw = math.degrees(math.atan2((R_POST.T @ Rw)[1, 0], (R_POST.T @ Rw)[0, 0]))
+        print(f"[pdiag] {label}: tilt {math.degrees(math.acos(float(np.clip(Rw[2, 2], -1.0, 1.0)))):.2f} deg, at {np.round(1000 * (plate().pos - PLATE0), 2)} mm, yaw {yaw:.2f} deg; "
+              f"tips in plate frame x {np.round(1000 * tp[:, 0], 0)} y {np.round(1000 * tp[:, 1], 1)} z {np.round(1000 * tp[:, 2], 1)}", flush=True)
+
+    pd("on the post")
     pinch = at([PINCH_X, 0.0, -0.005 - 0.001])
-    yield from r.move(pinch + [0.0, 0.0, 0.10], grip=g, finger=d.FINGER_OPEN, t=2.0, label="over the plate's neck")
+    yield from r.move(pinch + [0.0, 0.0, 0.10], grip=g, finger=PICK_OPEN, t=2.0, label="over the plate's neck")
     yield from r.servo(pinch + [0.0, 0.0, 0.05], tol=0.002, timeout=1.5, gain=0.3, read=tips, label="fingertips over the neck")
     yield from r.move(r.at() + [0.0, 0.0, -0.05], t=1.2, label="fingers down either side of the neck")
     yield from r.servo(pinch, tol=0.001, timeout=1.5, gain=0.3, read=tips, label="fingertips at the neck")
-    yield from r.close(0.0394, force=50.0, t=0.6, label="pinch the neck across its flats")
+    pd("after fingertips at the neck")
+    yield from r.close(0.0394, force=38.0, t=0.6, label="pinch the neck across its flats")
+    pd("after pinch the neck across its flats")
     yield from r.move(r.at() + [0.0, 0.0, 0.045], t=1.2, label="lift it out of the socket")
+    pd("after lift it out of the socket")
+    # check the grip on what is seen: the fingertips should sit about 1 mm under the sheet. A plate that slid up in the fingers as it left the
+    # socket puts them lower, and they would meet the housing's face before the plate reaches the pocket: set it back, open, and pinch again
+    # A plate that was not down in the socket (it rests cocked on the post's rim, its pad on the rim) is pinched cocked, and stays so in the
+    # fingers: leveling it over the pocket then tilts the hand as far, and a fingertip meets the housing's face before the plate is low enough
+    # to let go. So the plate's tilt in the vertical grip is read too: over REGRIP_DEG, level it in the hand, bring its pad over the socket,
+    # lower it in and let go, so it lies square in the socket, then pinch again
+    def reseat():
+        yield from r.move(r.at() + [0.0, 0.0, 0.02], t=0.6, label="up, clear of the post")
+        for _k in range(2):
+            n = plate().rotation()[:, 2]
+            ax = np.cross(n, [0.0, 0.0, 1.0])
+            ang = math.degrees(math.asin(float(np.clip(np.linalg.norm(ax), 0.0, 1.0))))
+            if ang > 0.3:
+                yield from r.turn(ang, axis=ax / np.linalg.norm(ax), t=0.8, label="level the plate in the hand")
+            yield from r.wait(0.4)
+        for dz, tries in ((0.015, 4), (0.0015, 3)):
+            for _k in range(tries):
+                err = PLATE0 + [0.0, 0.0, dz] - plate().pos
+                if np.linalg.norm(err[:2]) < 0.0003 and abs(err[2]) < 0.001:
+                    break
+                yield from r.move(r.at() + err, t=0.8, label="its pad over the socket")
+                yield from r.wait(0.4)
+        print(f"[knee] reseat: pad {np.round(1000 * (plate().pos - PLATE0), 2)} mm from in the socket, tilt {math.degrees(math.acos(float(np.clip(plate().rotation()[2, 2], -1.0, 1.0)))):.2f} deg", flush=True)
+        yield from r.open(t=0.3, label="let go in the socket")
+        yield from r.wait(0.3)
+        pd("let go in the socket")
+        yield from r.move(r.at() + [0.0, 0.0, 0.03], t=0.8, label="fingers up")
+        yield from r.move(r.at() + [0.0, 0.0, 0.02], grip=g, finger=PICK_OPEN, t=1.0, label="fingers upright")
+        yield from r.wait(0.3)
+        pd("reseated, let go")
+
+    for _ in range(3):
+        low = float(at([PINCH_X, 0.0, -0.005])[2] - tips()[2])
+        cocked = math.degrees(math.acos(float(np.clip(plate().rotation()[2, 2], -1.0, 1.0))))
+        print(f"[knee] held: fingertips {1000 * low:.1f} mm under the sheet at the pinch, the plate {cocked:.1f} deg from level", flush=True)
+        if low < 0.0025 and cocked < REGRIP_DEG:
+            break
+        if cocked >= REGRIP_DEG:
+            yield from reseat()
+        else:
+            yield from r.move(r.at() + [0.0, 0.0, -0.045], t=1.2, label="set it back in the socket")
+            yield from r.open(t=0.3, label="let go in the socket")
+            yield from r.move(r.at() + [0.0, 0.0, 0.03], finger=PICK_OPEN, t=0.8, label="fingers up")
+        pinch = at([PINCH_X, 0.0, -0.005 - 0.001])
+        yield from r.servo(pinch + [0.0, 0.0, 0.03], tol=0.002, timeout=1.5, gain=0.3, read=tips, label="fingertips over the neck")
+        yield from r.move(r.at() + [0.0, 0.0, -0.03], t=1.0, label="fingers down either side of the neck")
+        yield from r.servo(pinch, tol=0.001, timeout=1.5, gain=0.3, read=tips, label="fingertips at the neck")
+        pd("after fingertips at the neck")
+        yield from r.close(0.0394, force=38.0, t=0.6, label="pinch the neck across its flats")
+        pd("after pinch the neck across its flats")
+        yield from r.move(r.at() + [0.0, 0.0, 0.045], t=1.2, label="lift it out of the socket")
+        pd("after lift it out of the socket")
     # 3. carry over the pocket, then turn the plate to the pocket and bring its axis over the bearing's, read from its pose and the leg's
     pk = lambda: pocket(leg())  # noqa: E731  (the pocket's frame now: rotation, origin)
     goal = lambda: pk()[1] + pk()[0][:, 2] * RELEASE_H  # noqa: E731
@@ -537,19 +797,26 @@ def demo_script(ctx):
     yield from r.move(np.r_[r.at()[:2], high + off[2]], t=1.2, label="up, clear of the leg")
     yield from r.move(np.r_[goal()[:2] + off[:2], high + off[2]], t=2.0, label="carry it over the pocket")
     yield from r.move(goal() + off + [0.0, 0.0, 0.020], t=1.0, label="down over the pocket")
+    _diag(env, r, "down over the pocket")
 
-    def square():
-        """Turn the hand so the plate sits level with the face and turned to the pocket: the pinch lets it pitch a few degrees under its own weight."""
-        R = pk()[0].T @ plate().rotation()
-        pitch = math.degrees(math.asin(float(np.clip(R[2, 0], -1.0, 1.0))))  # its narrow end up
-        roll = math.degrees(math.asin(float(np.clip(-R[2, 1], -1.0, 1.0))))
-        yaw = math.degrees(math.atan2(R[1, 0], R[0, 0]))
-        if abs(pitch) > 0.05:
-            yield from r.turn(pitch, axis=pk()[0][:, 1], t=0.6, label="level the plate")
-        if abs(roll) > 0.05:
-            yield from r.turn(roll, axis=pk()[0][:, 0], t=0.6, label="level the plate across")
-        if abs(yaw) > 0.05:
-            yield from r.turn(-yaw, axis=pk()[0][:, 2], t=0.6, label="turn the plate to the pocket")
+    def square(rounds=1):
+        """Turn the hand so the plate sits level with the face and turned to the pocket: the pinch lets it pitch a few degrees under its own weight.
+        With more rounds, read and turn again until it is within 0.2 degrees (a pinch far from its centre of mass lets it swing as the hand turns)."""
+        for k in range(rounds):
+            R = pk()[0].T @ plate().rotation()
+            pitch = math.degrees(math.asin(float(np.clip(R[2, 0], -1.0, 1.0))))  # its narrow end up
+            roll = math.degrees(math.asin(float(np.clip(-R[2, 1], -1.0, 1.0))))
+            yaw = math.degrees(math.atan2(R[1, 0], R[0, 0]))
+            if k and max(abs(pitch), abs(roll), abs(yaw)) < 0.2:
+                return
+            if abs(pitch) > 0.05:
+                yield from r.turn(pitch, axis=pk()[0][:, 1], t=0.6, label="level the plate")
+            if abs(roll) > 0.05:
+                yield from r.turn(roll, axis=pk()[0][:, 0], t=0.6, label="level the plate across")
+            if abs(yaw) > 0.05:
+                yield from r.turn(-yaw, axis=pk()[0][:, 2], t=0.6, label="turn the plate to the pocket")
+            if rounds > 1:
+                yield from r.wait(0.4)
 
     def over(h_goal, tol=0.0001, tries=6):
         """Bring the plate's axis onto the bearing's and its origin to h_goal above seated, read from its pose: short moves, each followed by a
@@ -559,52 +826,89 @@ def demo_script(ctx):
             R, o = pk()
             err = (o + R[:, 2] * h_goal) - plate().pos
             side = err - R[:, 2] * float(err @ R[:, 2])
+            _diag(env, r, f"over h_goal {1000 * h_goal:.2f}")
             if np.linalg.norm(side) < tol and abs(float(err @ R[:, 2])) < 0.0005:
                 return
             yield from r.move(r.at() + err, t=0.8, label="the plate's axis over the bearing's")
 
-    yield from square()
-    yield from over(RELEASE_H + 0.010, tol=0.0003)
-    yield from square()
-    yield from over(RELEASE_H)
-    # 4. let go: the fingers cannot follow it into the pocket. The held plate trembles by a few tenths of a millimetre, so open the moment its
-    # axis is within 0.12 mm of the bearing's
-    for _round in range(4):
-        hit = False
-        for _ in range(int(2.0 * d.CONTROL_HZ)):
+    def seat(h, rounds=1):
+        """4. Level it, bring its axis onto the bearing's with its top h above seated, and let go: the fingers cannot follow it into the
+        pocket. The held plate trembles by a few tenths of a millimetre, so open the moment its axis is within 0.12 mm of the bearing's."""
+        yield from square(rounds)
+        yield from over(h + 0.010, tol=0.0003)
+        yield from square(rounds)
+        yield from over(h)
+        # let go only on the observed state: the axis within RELEASE_TOL of the bearing's, the height within 0.5 mm of h, the plate square to
+        # the pocket within 0.3 degrees. Until then, level and correct again (up to 10 rounds)
+        def ready():
             R, o = pk()
             e = plate().pos - o
-            if np.linalg.norm(e - R[:, 2] * float(e @ R[:, 2])) < RELEASE_TOL:
-                hit = True
+            Rp = R.T @ plate().rotation()
+            sq = max(abs(math.degrees(math.atan2(Rp[1, 0], Rp[0, 0]))), math.degrees(math.acos(float(np.clip(Rp[2, 2], -1.0, 1.0)))))
+            return np.linalg.norm(e - R[:, 2] * float(e @ R[:, 2])) < RELEASE_TOL and abs(float(e @ R[:, 2]) - h) < 0.0005 and sq < 0.3
+
+        for _round in range(10):
+            hit = False
+            for _k in range(int(2.0 * d.CONTROL_HZ)):
+                if _k % 10 == 0:
+                    _diag(env, r, f"ready round {_round + 1} step {_k}")
+                if ready():
+                    hit = True
+                    break
+                yield
+            if hit:
                 break
-            yield
-        if hit:
-            break
-        yield from over(RELEASE_H, tol=0.0001, tries=3)  # still off the bearing's axis: correct once more before letting go
-    st = knee_now(env)
-    print(f"[knee] at the mouth: axis {np.round(1000 * st['axis'], 2)} mm from the bearing's, yaw {st['yaw']:.2f} tilt {st['tilt']:.2f} deg; face {st['face']:.2f} deg from up", flush=True)
-    yield from r.open(t=0.2, label="let go above the pocket")
-    yield from r.move(r.at() + [0.0, 0.0, 0.03], t=0.6, label="fingers up")
-    yield from r.wait(0.5)
-    st = knee_now(env)
-    print(f"[knee] let go: rim {1000 * st['h'].min():.2f} to {1000 * st['h'].max():.2f} mm above the face, axis off {1000 * st['off']:.3f} mm", flush=True)
-    # 5. press it home with the closed fingertips: where it stands highest if it has cocked, else between the boss and its centre of mass.
-    # The arm presses through its soft joints: sent 20 mm below flush, it pushes about 10 N
-    for _ in range(4):
+            print(f"[knee] not ready to let go (round {_round + 1}): axis {np.round(1000 * knee_now(env)['axis'], 2)} mm, yaw {knee_now(env)['yaw']:.2f} tilt {knee_now(env)['tilt']:.2f} deg", flush=True)
+            yield from square(3)
+            yield from over(h, tol=0.0001, tries=3)  # still off: level and correct once more before letting go
         st = knee_now(env)
-        if np.abs(st["h"]).max() <= FLUSH_H * 0.5:
-            break
-        hi = RIM[int(np.argmax(st["h"]))]
-        spot = np.array([PRESS_X, 0.0, 0.0]) if st["h"].max() - st["h"].min() < 0.001 else np.clip(0.6 * hi, [-0.025, -0.025, 0.0], [0.090, 0.025, 0.0])
-        p = plate().to_world(np.array([spot]))[0]
-        yield from r.move(r.at(), finger=d.FINGER_CLOSED, t=0.4, label="close the fingers")
-        yield from r.servo(p + [0.0, 0.0, 0.020], tol=0.0015, timeout=2.0, gain=0.3, read=tips, label="fingertips over the plate")
-        yield from r.move(r.at() + [0.0, 0.0, -(tips()[2] - (pk()[1][2] - PRESS_DEPTH))], t=1.5, label="press it home")
-        yield from r.wait(0.8)
-        yield from r.move(r.at() + [0.0, 0.0, 0.03], t=0.6, label="off the plate")
-        yield from r.wait(0.3)
+        print(f"[knee] at the mouth: axis {np.round(1000 * st['axis'], 2)} mm from the bearing's, yaw {st['yaw']:.2f} tilt {st['tilt']:.2f} deg; face {st['face']:.2f} deg from up", flush=True)
+        yield from r.open(t=0.2, label="let go above the pocket")
+        yield from r.move(r.at() + [0.0, 0.0, 0.03], t=0.6, label="fingers up")
+        yield from r.wait(0.5)
         st = knee_now(env)
-        print(f"[knee] pressed at {np.round(1000 * spot[:2], 0)} mm: rim {1000 * st['h'].min():.2f} to {1000 * st['h'].max():.2f} mm, axis off {1000 * st['off']:.3f} mm, holes {1000 * st['holes']:.2f} mm; face {st['face']:.2f} deg from up", flush=True)
+        print(f"[knee] let go: rim {1000 * st['h'].min():.2f} to {1000 * st['h'].max():.2f} mm above the face (each point: {np.round(1000 * st['h'], 1)}), axis off {1000 * st['off']:.3f} mm, tilt {st['tilt']:.2f} deg", flush=True)
+
+    def press(tries):
+        """5. Press it home with the closed fingertips: where it stands highest if it has cocked, else between the boss and its centre of mass.
+        The arm presses through its soft joints: sent 20 mm below flush, it pushes about 10 N. A press that leaves it where it was is tried
+        again over the boss's axis, which drives the pad and the boss straight down their bores, and each try goes 5 mm deeper."""
+        last = None
+        for k in range(tries):
+            st = knee_now(env)
+            if np.abs(st["h"]).max() <= FLUSH_H * 0.5:
+                return
+            hi = RIM[int(np.argmax(st["h"]))]
+            stuck = last is not None and np.abs(st["h"] - last).max() < 0.0005
+            last = st["h"].copy()
+            spot = np.array([PRESS_X, 0.0, 0.0]) if (stuck or st["h"].max() - st["h"].min() < 0.001) else np.clip(0.6 * hi, [-0.025, -0.025, 0.0], [0.090, 0.025, 0.0])
+            depth = PRESS_DEPTH + 0.005 * k
+            p = plate().to_world(np.array([spot]))[0]
+            yield from r.move(r.at(), finger=d.FINGER_CLOSED, t=0.4, label="close the fingers")
+            yield from r.servo(p + [0.0, 0.0, 0.020], tol=0.0015, timeout=2.0, gain=0.3, read=tips, label="fingertips over the plate")
+            yield from r.move(r.at() + [0.0, 0.0, -(tips()[2] - (pk()[1][2] - depth))], t=1.5, label="press it home")
+            yield from r.wait(0.8)
+            print(f"[knee] pressing: fingertips {1000 * (tips()[2] - pk()[1][2]):.1f} mm from the face, plate top {1000 * knee_now(env)['h'].max():.2f} mm", flush=True)
+            yield from r.move(r.at() + [0.0, 0.0, 0.03], t=0.6, label="off the plate")
+            yield from r.wait(0.3)
+            st = knee_now(env)
+            print(f"[knee] pressed at {np.round(1000 * spot[:2], 0)} mm: rim {1000 * st['h'].min():.2f} to {1000 * st['h'].max():.2f} mm, axis off {1000 * st['off']:.3f} mm, holes {1000 * st['holes']:.2f} mm; face {st['face']:.2f} deg from up", flush=True)
+
+    yield from seat(RELEASE_H)
+    yield from press(PRESSES)
+    print(f"[knee] props, start and end pose: {_props_moved(env, props0)}", flush=True)
     # 6. hands clear
     yield from r.move(np.array([0.22, -0.30, TOP + 0.20]), t=1.5, label="the right hand away")
     yield from r.wait(2.0)
+    print(f"[knee] props at the end: {_props_moved(env, props0)}", flush=True)
+    if mode != "undo":
+        return
+    # undo: the plate seated and held still with both hands clear (1.0 for 1 s), then the right hand comes back and rests its closed fingertips
+    # on the plate's top to the end, as if holding it down. The 1.0 is read from the state at the end, so the score must fall to 0.75.
+    print(f"[knee] undo: seated, score {TRIAL.score()}", flush=True)
+    top = at([PRESS_X, 0.0, 0.0])
+    yield from r.move(r.at(), finger=d.FINGER_CLOSED, t=0.4, label="close the fingers")
+    yield from r.servo(top + [0.0, 0.0, 0.03], tol=0.002, timeout=2.0, gain=0.3, read=tips, label="fingertips over the seated plate")
+    yield from r.move(r.at() + [0.0, 0.0, -0.028], t=1.2, label="fingertips on the plate's top")
+    yield from r.wait(3.0)
+    print(f"[knee] undo: a hand on the plate at the end, score {TRIAL.score()}", flush=True)

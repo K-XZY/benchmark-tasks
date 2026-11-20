@@ -270,6 +270,70 @@ class Arm:
             yield from self.move(goal + np.array([0.0, 0.0, rise]), t=0.6, label=f"{label}: rise")
         yield from self.move(self.at() - back * self.approach_axis(), label=f"{label}: back")
 
+    def press(self, direction, force: float, max_travel: float, speed: float = 0.03, settle: float = 0.5, timeout: float = 6.0, max_lead: float = 0.06, label: str = "press"):
+        """Push the TCP along `direction` (world) with about `force` newtons, the grip held still, through Isaac Lab's differential IK (`taskspace.py`).
+        In free space the TCP goes at `speed` m/s; on contact the command stands `force` worth of joint-spring stretch ahead of the TCP, and no further.
+        Ends when the TCP has moved `max_travel` m along `direction`, or has pushed at 90 % of `force` for `settle` s, or after `timeout` s; the command stays
+        where it ended, still pushing, until the next move. Returns {"why", "travel", "force_est", "lead"}: `res = yield from arm.press(...)`.
+        The force is the springs' (80 N m/rad shoulder, 10 wrist) and the arm's gravity is compensated, but a held load's weight is not: check what the part did."""
+        import taskspace as ts
+
+        d = np.asarray(direction, dtype=float) / np.linalg.norm(direction)
+        ctl = ts.DiffIK()
+        p0_obs = self.tcp().copy()
+        p0_cmd, r_hold = ik.tcp_pose(self.q, self.base)
+        s_cmd, travel, f_est, good, why, lead = 0.0, 0.0, 0.0, 0, "timeout", 0.0
+        for k in range(max(1, round(timeout * CONTROL_HZ))):
+            q_obs = self.ctx.observed(self.side)[:6]
+            travel = float((ik.tcp_pose(q_obs, self.base)[0] - p0_obs) @ d)
+            if travel >= max_travel:
+                why = "travel"
+                break
+            c_dd = float(d @ ts.compliance(q_obs, self.base) @ d)
+            lead = min(force * c_dd, max_lead)
+            s_cmd = min(s_cmd + speed * DT, travel + lead)
+            f_est = max(0.0, s_cmd - travel) / c_dd
+            good = good + 1 if f_est >= 0.9 * force else 0
+            if good >= settle * CONTROL_HZ:
+                why = "force"
+                break
+            for _ in range(2):
+                p_cmd, r_cmd = ik.tcp_pose(self.q, self.base)
+                self.q = ctl.step(self.q, self.base, p0_cmd + d * s_cmd - p_cmd, ik._rot_error(r_hold, r_cmd))
+            self.cmd = np.r_[self.q, float(np.clip(self.finger / FINGER_OPEN, 0.0, 1.0))]
+            yield
+        if lead >= max_lead and why != "travel":
+            print(f"[demokit] {self.side} '{label}': {force:.0f} N needs more than {max_lead * 1000:.0f} mm of lead here: the arm is too soft along this direction", flush=True)
+        print(f"[demokit] {self.side} '{label}': {why}, travel {travel * 1000:.1f} mm, about {f_est:.1f} N, lead {lead * 1000:.1f} mm"
+              f" ({'Isaac Lab DifferentialIKController' if ctl.ctrl is not None else 'NumPy DLS'})", flush=True)
+        return {"why": why, "travel": travel, "force_est": f_est, "lead": lead}
+
+    def plan_to(self, pos, grip=None, finger: float | None = None, back: float = 0.0, ignore=(), other_arm: bool = True, speed: float = SPEED, label: str = "plan"):
+        """Like `move`, but on a path that cuRobo plans round everything in the scene and the other arm (`curobo_plan.py`; the 5090 only, README "cuRobo").
+        `grip` may be a list of grips: cuRobo takes one it can reach clear of everything, and the arm keeps it (`self.grip`). `back`: stop this far
+        short of `pos` along the grip's approach axis, for a straight last move in. `ignore`: parts to leave out, such as the one about to be held.
+        Returns whether it found a path; with none, the arm stays where it is.
+        Plan to a pose beside the part, then go the last few centimetres with `move` or `servo`: the planner keeps the whole hand clear of everything."""
+        import curobo_plan
+
+        grips = list(grip) if isinstance(grip, (list, tuple)) else [self.grip if grip is None else grip]
+        f = self.finger if finger is None else finger
+        goals = np.array([np.asarray(pos, dtype=float) + self.trim - back * g.rot[:, 2] for g in grips])
+        res = curobo_plan.plan(self.ctx, self.side, self.q, goals, [g.rot for g in grips], finger=-max(abs(f), abs(self.finger)), ignore=ignore, other_arm=other_arm, speed=speed)
+        if not res.ok:
+            print(f"[demokit] {self.side} '{label}': cuRobo found no path ({res.why})", flush=True)
+            return False
+        grip, goal = grips[res.grip], goals[res.grip]
+        f0, n = self.finger, len(res.path)
+        for k, q in enumerate(res.path, 1):
+            self.q = np.asarray(q, dtype=float)
+            self.cmd = np.r_[self.q, float(np.clip((f0 + (f - f0) * k / n) / FINGER_OPEN, 0.0, 1.0))]
+            yield
+        self.finger, self.grip = f, grip
+        p, rot = ik.tcp_pose(self.q, self.base)
+        self._note(float(np.linalg.norm(p - goal)) * 1000, float(np.degrees(np.linalg.norm(ik._rot_error(grip.rot, rot)))), label)
+        return True
+
 
 # -- a demo's context ------------------------------------------------------------------------
 
