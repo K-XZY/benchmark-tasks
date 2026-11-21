@@ -47,7 +47,7 @@ TZ = 0.046  # flange top: the rim
 LH = 0.034  # lid height: 80 mm shut
 IX0, IX1, IY = WX0 + T, WX1 - T, WY - T  # inside the walls
 LID_OPEN = float(ENV("KB_OPEN", "85.0"))  # the lid's hinge spring rest angle (joint zero, its stop); its weight sags it to about 73 degrees
-LID_K = float(ENV("KB_LIDK", "0.015"))  # N m/rad, about the rest angle: 0.026 N m open at shut against 0.011 N m of the lid's weight
+LID_K = float(ENV("KB_LIDK", "0.015"))  # N m/rad, about the rest angle: 0.022 N m open at shut (0.015 x 85 deg) against 0.011 N m of the lid's weight
 TAB_C = (-0.050, 0.050)  # the two tabs' centres along the front, as in the maker's photos (about a quarter of the way in from each end)
 NOTCH_Y, NOTCH_X = 0.011, -0.071  # each notch in the base's front flange: half width, inner edge
 TAB_Y, TAB_X0, TAB_X1, TAB_Z0, TAB_ZH = 0.010, -0.0735, -0.0720, 0.038, 0.074  # the tab strip (lid shut): half width, outer and inner face, bottom, hinge height
@@ -271,7 +271,7 @@ def inside(local_pts: np.ndarray) -> bool:
 
 
 def judge(lid_open: float, food_in: bool, caught: bool, flat: bool, released: bool, dead: bool, best: float) -> float:
-    """0 if the box tipped or left the counter. 1.0 at the end: both tabs caught, all food inside, box flat, both grippers 3 cm clear and still for 2 s.
+    """0 if the box tipped or left the counter. 1.0 at the end: both tabs caught, all food inside, box flat, both grippers 3 cm clear and the box, lid and tabs still for 2 s.
     Otherwise the highest substep reached: 0.7 lid down (front edge within 10 mm of the flange) with all food inside, a clean seam; 0.3 lid down with food in the seam or outside."""
     if dead:
         return 0.0
@@ -376,12 +376,12 @@ m.on_reset(TRIAL.reset)
 
 
 def success(objects) -> bool:
-    """Both tabs caught under the flange, every piece of food inside the box, the box flat, both grippers 3 cm clear and all still for 2 s, the box never tipped past 30 degrees."""
+    """Both tabs caught under the flange, every piece of food inside the box, the box flat, both grippers 3 cm clear and the box, lid and tabs still for 2 s, the box never tipped past 30 degrees."""
     return TRIAL.full
 
 
 def score(objects) -> float:
-    """1.0 latched with all food inside, released and still 2 s; else the highest substep reached: 0.7 lid down with all food inside, 0.3 lid down with food in the seam. 0 if the box tipped or left the counter."""
+    """1.0 latched with all food inside, released, box still 2 s; else the highest substep reached: 0.7 lid down with all food inside, 0.3 lid down with food in the seam. 0 if the box tipped or left the counter."""
     return TRIAL.score
 
 

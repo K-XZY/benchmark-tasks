@@ -19,7 +19,7 @@ def main() -> int:
         print(f"{'ok ' if ok else 'BAD'} {name}{': ' + str(got) if got != '' else ''}")
 
     for name, args, want in (  # judge(lid_open, food_in, caught, flat, released, dead, best)
-        ("latched, food in, flat, released and still 2 s", (0.3, True, True, True, True, False, 0.7), 1.0),
+        ("latched, food in, flat, released, box still 2 s", (0.3, True, True, True, True, False, 0.7), 1.0),
         ("latched, but a hand still on the box", (0.3, True, True, True, False, False, 0.7), 0.7),
         ("latched, but a leaf across the seam", (0.3, False, True, True, True, False, 0.3), 0.3),
         ("latched, but the box tipped earlier", (0.3, True, True, True, True, True, 0.7), 0.0),
