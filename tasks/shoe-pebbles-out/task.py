@@ -1,11 +1,11 @@
 """Get the small stones out of a running shoe: hold it by the heel, turn it opening-down with the toe up, shake until all 8 are out, set it back down sole-first.
 
-A men's US 9 road running shoe (modelled on the Nike Pegasus 41: 297 g, 10 mm heel-to-toe drop, 37/27 mm stack; 290 mm long, collar opening about 100 x 67 mm), one rigid free
-body whose shell is a compound of convex pieces with walls at least 4.5 mm thick: sole, two side walls, a closed vamp over the toe box, a padded heel counter with a rigid pull tab (a real tab is a stiff stitched loop). Eight gravel pebbles,
-4 to 8 mm, lie inside it, most in the toe box under the vamp. The right hand pinches the heel pull tab at its root (one finger in front of the tab, one behind it), lifts the shoe, turns it toe-up
+A men's US 9 road running shoe (modelled on the Nike Pegasus 41, nike.com/t/pegasus-41-mens-road-running-shoes-LMhfRGdO: 297 g, 10 mm heel-to-toe drop, 37/27 mm stack; 290 mm long, collar opening about 100 x 67 mm), one rigid free
+body whose shell is a compound of convex pieces with walls 4.5 mm thick (the real mesh upper is thinner; thin walls let 4 mm stones tunnel): sole, two side walls, a closed vamp over the toe box, a solid rigid heel counter 12 mm thick and 120 mm tall at the back (the real counter is foam-padded; one rigid body here). Eight gravel pebbles,
+4 to 8 mm, lie inside it, most in the toe box under the vamp. The right hand pinches the heel counter from the side, one finger inside the collar and one behind the heel (fingers leaned 10 degrees off level), lifts the shoe, turns it toe-up
 past vertical so the opening faces down, shakes it along its length and sets it back down.
 
-    python demokit.py task.py OUT --no-record --mode full,none,collar_up,heel_up,on_side,drop
+    python demokit.py task.py OUT --no-record --mode full,none,collar_up,heel_up,on_side,drop,drop_low,drop_25mm,toe_first,wide_toe_first,relift_3cm,collar_hook_drop
     python demokit.py task.py OUT          (final: 640 x 360, the GPU to yourself)
 """
 
@@ -29,18 +29,16 @@ INSTRUCTION = "There are some small stones in this shoe. Get them all out, then 
 SUCCESS_HOLD_S = 0.0  # the scorer holds the end state itself (2 s, counted in control steps)
 SCORE_OVER = "end"
 TOP = d.TABLE_TOP
-LAYOUT = os.environ.get("SHOE_LAYOUT", "A")
 
 # -- the shoe, in its own frame: x from the back of the heel (0) to the toe tip, y across, z up from the sole's underside ---------------------------------------------------------
 L = 0.290
 T = 0.0045  # upper wall thickness
-BACK = 0.012  # the padded heel counter at the back, solid from the sole to the heel tab
+BACK = 0.012  # the solid rigid heel counter (the real one is foam-padded) at the back, solid from the sole to its top edge
 THROAT = 0.115  # the collar opening runs from BACK to here; the vamp and tongue close the shoe in front of it
 CROWN = 0.008  # the vamp's rise from its sides to its centre line
-TAB = (0.015, 0.100, 0.140)  # the heel pull tab on the back of the counter: half-width, bottom, top (12 mm thick, padded)
 SHOE_M = 0.297
 # key sections: (x, outer half-width, top of the upper: the collar edge behind THROAT, the vamp's centre line in front of it)
-KEY = [(0.000, 0.022, 0.105), (0.012, 0.032, 0.103), (0.030, 0.037, 0.094), (0.060, 0.038, 0.090), (0.090, 0.037, 0.089), (0.115, 0.037, 0.092),
+KEY = [(0.000, 0.022, 0.120), (0.012, 0.032, 0.118), (0.030, 0.037, 0.100), (0.060, 0.038, 0.090), (0.090, 0.037, 0.089), (0.115, 0.037, 0.092),
        (0.140, 0.040, 0.091), (0.170, 0.045, 0.084), (0.200, 0.050, 0.075), (0.230, 0.050, 0.066), (0.255, 0.045, 0.058), (0.272, 0.036, 0.051),
        (0.283, 0.024, 0.045), (0.290, 0.010, 0.036)]
 KX = np.array([k[0] for k in KEY])
@@ -101,7 +99,6 @@ def shoe_pieces():
                 pa = [(a, 0.0, ta - T), (a, s * wa, sa - T), (a, s * wa, sa), (a, 0.0, ta)]
                 pb = [(b, 0.0, tb - T), (b, s * wb, sb - T), (b, s * wb, sb), (b, 0.0, tb)]
                 out.append((f"vamp{nm}{i}", pa + pb, "upper"))
-    out.append(("tab", _quad(0.0, -TAB[0], TAB[0], TAB[1], TAB[2]) + _quad(BACK, -TAB[0], TAB[0], TAB[1], TAB[2]), "collar"))
     return out
 
 
@@ -119,7 +116,7 @@ def gap_to_shoe(p_local) -> np.ndarray:
     p = np.atleast_2d(p_local)
     x, y, z = p[:, 0], p[:, 1], p[:, 2]
     xc = np.clip(x, 0.0, L)
-    top = np.where((xc <= BACK) & (np.abs(y) <= TAB[0]), TAB[2], top_z(xc))  # the pull tab
+    top = top_z(xc)
     g = np.stack([-x, x - L, np.abs(y) - half_w(xc), -z, z - top], axis=1)
     return np.maximum(g.max(axis=1), 0.0)
 
@@ -129,8 +126,7 @@ N_PEB = 8
 SIZES = [0.0080, 0.0074, 0.0068, 0.0062, 0.0056, 0.0050, 0.0045, 0.0041]  # longest axis
 RHO = 2650.0
 # where each starts in the shoe (x, y): 4 in the toe box, 2 at the midfoot, 2 at the heel
-START = {"A": [(0.238, -0.013), (0.242, 0.015), (0.256, 0.001), (0.222, 0.002), (0.160, -0.011), (0.172, 0.013), (0.050, 0.010), (0.072, -0.010)],
-         "B": [(0.232, 0.012), (0.248, -0.012), (0.258, 0.010), (0.218, -0.014), (0.150, 0.006), (0.185, -0.006), (0.040, -0.012), (0.085, 0.012)]}[LAYOUT]
+START = [(0.238, -0.013), (0.242, 0.015), (0.256, 0.001), (0.222, 0.002), (0.160, -0.011), (0.172, 0.013), (0.050, 0.010), (0.072, -0.010)]
 
 
 def pebble_mesh(k: int) -> m.Mesh:
@@ -151,7 +147,7 @@ def pebble_mass(k: int) -> float:
 
 
 # -- the scene ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-GRIP_XY, SHOE_YAW = {"A": ((0.33, -0.08), 60.0), "B": ((0.32, -0.10), 50.0)}[LAYOUT]  # where the pull tab stands, and the shoe's heading (heel to toe) from +x
+GRIP_XY, SHOE_YAW = (0.33, -0.08), 60.0  # where the heel counter stands, and the shoe's heading (heel to toe) from +x
 SHOE_X = GRIP_XY[0] - (BACK / 2) * math.cos(math.radians(SHOE_YAW))
 SHOE_Y = GRIP_XY[1] - (BACK / 2) * math.sin(math.radians(SHOE_YAW))
 LOOKS = {"outsole": m.Look(m.rgb(0.10, 0.10, 0.11), roughness=0.9), "midsole": m.Look(m.rgb(0.93, 0.93, 0.90), roughness=0.7),
@@ -165,7 +161,7 @@ def _laces():
         z = top_z(x) + 0.0015
         w = half_w(x) * 0.55
         parts.append((f"lace{k}", m.tube([(x, -w, z - 0.002), (x, 0.0, z), (x, w, z - 0.002)], 0.0018, sides=6), "lace"))
-    for s, nm in ((1.0, "l"), (-1.0, "r")):  # the padded collar's dark lining along both edges of the opening
+    for s, nm in ((1.0, "l"), (-1.0, "r")):  # the collar's dark lining along both edges of the opening
         xs = np.linspace(BACK, THROAT, 8)
         parts.append((f"collar{nm}", m.tube([(x, s * (half_w(x) - T / 2), top_z(x) + 0.001) for x in xs], 0.0032, sides=6), "collar"))
     return parts
@@ -214,7 +210,12 @@ def scene_ccd() -> bool:
 HOLD_STEPS = 40  # 2 s at 20 Hz
 CLEAR_M = 0.03
 LEVEL_DEG = 20.0
-DROP_SPEED = 0.45  # m/s, with no hand closed on the shoe: what a free fall of 1 cm reaches (sqrt(2 g 0.01) = 0.44)
+TIP_Z = (0.12, 0.134, 0.148)  # fingertip pad heights along the gripper axis from the housing origin: the TCP is at 0.134
+MATCH_V = 0.1  # m/s: a fingertip counts as holding only while it slips less than this over the shoe's surface (a finger that merely sits in the collar and lets the shoe slide does not)
+DT = 0.05  # s per scorer step (20 Hz)
+HELD_M = 0.003  # both fingertips within 3 mm of the shoe
+RELEASE_UP = 0.015  # m: no point of the sole may be higher than this above the table when the hand lets go
+DROP_SPEED = 0.54  # m/s, with no hand closed on the shoe: what a free fall of 1.5 cm reaches (sqrt(2 g 0.015) = 0.54)
 TABLE_X, TABLE_Y = (0.0, 0.85), (-0.60, 0.60)  # the table top's extent in the station frame (estimate, larger than the reach)
 
 
@@ -239,6 +240,23 @@ def gripper_points(env) -> np.ndarray:
     return np.vstack(out)
 
 
+def fingertip_points(env) -> np.ndarray:
+    """The two finger pads of each hand, as 3 points each at the TCP: (2 hands x 2 fingers x 3, 3) in the station frame, left hand first."""
+    base = env.unwrapped
+    origin = m._np(base.scene.env_origins[0])
+    out = []
+    for side in ("left", "right"):
+        robot = base.scene[f"{side}_robot"]
+        i = robot.find_bodies("gripper")[0][0]
+        pose = m._np(robot.data.body_link_pose_w)[0, i]
+        R = m.quat_matrix(pose[3:7])
+        opening = abs(float(m._np(robot.data.joint_pos)[0, robot.find_joints("joint7")[0][0]]))
+        for sx in (-1.0, 1.0):
+            for dz in TIP_Z:
+                out.append(pose[:3] - origin + R @ np.array([sx * opening, 0.0, dz]))
+    return np.array(out)
+
+
 def tier(n_out: int, set_down: bool) -> float:
     if n_out >= N_PEB and set_down:
         return 1.0
@@ -260,7 +278,27 @@ class Trial:
         self.n_out = 0
         self.set_down = False
         self.peak_v = 0.0
+        self.free_steps = 0
+        self.was_held = False
+        self.prev_loc = None
+        self.ever_held = False
+        self.held_z = 0.0
         self.last = {}
+
+    def free_air(self, held, high):
+        """After a hold: free of both grippers for 2 steps with a sole point more than RELEASE_UP above the table voids (let go in the air, or tipped over after release)."""
+        self.free_steps = 0 if held else self.free_steps + 1
+        if self.n > 10 and self.ever_held and self.free_steps >= 2 and high > RELEASE_UP and not self.void:
+            self.void, self.why = True, f"shoe let go {high:.3f} m above the table"
+
+    def track_hold(self, held: bool, height: float):
+        """While held, remember the height of the sole's highest sampled point above the table; on the first step the hand no longer holds it, void if that height was over RELEASE_UP."""
+        if held:
+            self.held_z = height
+        elif self.was_held and self.held_z > RELEASE_UP and self.n > 10 and not self.void:
+            self.void, self.why = True, f"shoe let go {self.held_z:.3f} m above the table"
+        self.was_held = held
+        self.ever_held = self.ever_held or held
 
     def step(self, env):
         self.n += 1
@@ -273,7 +311,15 @@ class Trial:
         self.n_out = int((~inside_shoe(loc)).sum())
         v = float(np.linalg.norm(shoe.lin_vel))
         gaps = gap_to_shoe((gripper_points(env) - shoe.pos) @ R)
-        held = any(opening(env, s) < 0.025 and gaps[k * 165:(k + 1) * 165].min() < 0.01 for k, s in enumerate(("left", "right")))  # a hand closed on the shoe
+        tg = gap_to_shoe((fingertip_points(env) - shoe.pos) @ R).reshape(2, 2, len(TIP_Z))  # (hand, finger, pad point)
+        tips = fingertip_points(env)
+        loc_tips = (tips - shoe.pos) @ R  # each fingertip point in the shoe's own frame: it stays put while the shoe is held
+        slip = np.linalg.norm(loc_tips - self.prev_loc, axis=1) / DT if self.prev_loc is not None else np.zeros(len(tips))
+        self.prev_loc = loc_tips
+        moving_with = (slip < MATCH_V).reshape(2, 2, len(TIP_Z))
+        held = any(bool(((tg[k] < HELD_M) & moving_with[k]).any(axis=1).all()) for k in range(2))  # both fingertips of one hand on the shoe and moving with it
+        corners = (np.array([[0.0, -0.03, 0.0], [0.0, 0.03, 0.0], [L, -0.01, 0.0], [L, 0.01, 0.0], [0.20, -0.05, 0.0], [0.20, 0.05, 0.0]]) @ R.T + shoe.pos)[:, 2]
+        self.track_hold(held, float(corners.max() - TOP))
         if self.n > 10:  # after the harness's settle
             if not held:
                 self.peak_v = max(self.peak_v, v)
@@ -283,14 +329,14 @@ class Trial:
         if not on_table and self.n > 10 and not self.void:
             self.void, self.why = True, "shoe off the table"
         level = float(np.degrees(np.arccos(np.clip(R[2, 2], -1.0, 1.0))))
-        corners = (np.array([[0.0, -0.03, 0.0], [0.0, 0.03, 0.0], [L, -0.01, 0.0], [L, 0.01, 0.0], [0.20, -0.05, 0.0], [0.20, 0.05, 0.0]]) @ R.T + shoe.pos)[:, 2]
+        self.free_air(held, float(corners.max() - TOP))
         resting = bool(corners.min() > TOP - 0.004 and corners.max() < TOP + 0.012 and np.linalg.norm(shoe.lin_vel) < 0.02)
         gap = float(gaps.min())
         open_ = all(opening(env, s) > 0.025 for s in ("left", "right"))
         self.set_down = bool(level <= LEVEL_DEG and resting and gap >= CLEAR_M and open_)
         full = self.n_out >= N_PEB and self.set_down
         self.ok_steps = self.ok_steps + 1 if full else 0
-        self.last = {"n": self.n, "out": self.n_out, "level": round(level, 1), "resting": resting, "gap": round(gap, 3), "open": open_, "v": round(v, 3), "peak_v_unheld": round(self.peak_v, 3), "held": held,
+        self.last = {"n": self.n, "out": self.n_out, "level": round(level, 1), "resting": resting, "gap": round(gap, 3), "open": open_, "v": round(v, 3), "peak_v_unheld": round(self.peak_v, 3), "held": held, "held_z": round(self.held_z, 3), "ax": [round(float(R[2, 0]), 2), round(float(R[2, 1]), 2)], "pos": [round(float(c), 3) for c in shoe.pos],
                      "ok": self.ok_steps, "void": self.why, "tier": self.score()}
         if self.n % 20 == 0:
             loc_r = [[round(float(c) * 1000) for c in q] for q in loc]
@@ -325,15 +371,22 @@ TILT2 = float(os.environ.get("SHOE_TILT2", "162"))  # degrees the toe is raised 
 SHAKES = int(os.environ.get("SHOE_SHAKES", "8"))
 AMP = float(os.environ.get("SHOE_AMP", "0.025"))
 HALF = float(os.environ.get("SHOE_HALF", "0.25"))  # seconds per stroke
-GRIP_Z = float(os.environ.get("SHOE_GRIPZ", "0.124"))  # TCP height on the pull tab, above the sole's underside
+GRIP_Z = float(os.environ.get("SHOE_GRIPZ", "0.114"))  # TCP height on the heel counter, above the sole's underside
+GRIP_TH = float(os.environ.get("SHOE_TH", "80"))  # degrees the fingers lean from straight down towards the across-shoe direction (90: level)
+PINCH_N = float(os.environ.get("SHOE_PINCH", "40"))  # N a finger
 LIFT = float(os.environ.get("SHOE_LIFT", "0.18"))
+ROLL = float(os.environ.get("SHOE_ROLL", "40"))  # degrees
+SETDZ = float(os.environ.get("SHOE_SETDZ", "0.002"))
+TOE_DZ = float(os.environ.get("SHOE_TOEDZ", "0.035"))  # toe_first lowering
+TOE_ANG = float(os.environ.get("SHOE_TOEANG", "-8"))  # toe_first pitch, degrees
+COMP = float(os.environ.get("SHOE_COMP", "0"))  # degrees the hand turns the heel down after the toe touches: the shoe hangs toe-down in the pinch
 
 
 def demo_script(ctx):
     """Modes: full. none: the arms wait. collar_up: lift and shake upright. heel_up: turn the opening down with the toe kept low, and shake. on_side: empty it, then lay it on its side.
-    drop: empty it, then let go of it 10 cm above the table."""
+    drop: empty it, then open the hand 10 cm above the set-down point. drop_low: the same at 3 cm. drop_25mm: at 2.5 cm. toe_first: empty it, roll it level, then set the toe down first with the heel about 4 cm up and let go. wide_toe_first: empty it and set it down as in full, then grip the heel across its sides (opening 7.5 cm), lift 7 cm, pitch the toe down 8 degrees and let go. relift_3cm: the full run, then pinch again, lift 3 cm and let go."""
     mode = ctx.mode
-    if mode not in ("full", "none", "collar_up", "heel_up", "on_side", "drop"):
+    if mode not in ("full", "none", "collar_up", "heel_up", "on_side", "drop", "drop_low", "drop_25mm", "toe_first", "wide_toe_first", "relift_3cm", "collar_hook_drop"):
         raise ValueError(f"unknown mode {mode!r}")
     R_ = ctx.right
     if mode == "none":
@@ -342,12 +395,12 @@ def demo_script(ctx):
     c, s = math.cos(math.radians(SHOE_YAW)), math.sin(math.radians(SHOE_YAW))
     along = np.array([c, s, 0.0])  # heel to toe
     axis = np.cross(along, [0.0, 0.0, 1.0])  # across the shoe: a positive turn about this raises the toe
-    grip = d.level(SHOE_YAW - 90.0)  # fingers level, pointing across the shoe, closing along its length: one in front of the pull tab, one behind it
+    grip = d.tilted(GRIP_TH, SHOE_YAW - 90.0)  # fingers level, pointing across the shoe, closing along its length: one in front of the heel counter's rim, one behind it
     g0 = shoe_to_world((BACK / 2, 0.0, GRIP_Z))
     yield from R_.move(g0 - 0.07 * axis + [0.0, 0.0, 0.03], grip=grip, finger=d.FINGER_OPEN, label="beside the heel")
-    yield from R_.move(g0 - 0.07 * axis, t=0.8, label="level with the pull tab")
-    yield from R_.move(g0, t=1.2, label="astride the pull tab")
-    yield from R_.close(BACK, 30.0, label="pinch the pull tab")
+    yield from R_.move(g0 - 0.07 * axis, t=0.8, label="level with the heel counter")
+    yield from R_.move(g0, t=1.2, label="astride the heel counter")
+    yield from R_.close(BACK, PINCH_N, label="pinch the heel counter")
     yield from R_.move(R_.at() + [0.0, 0.0, LIFT], t=1.5, label="lift")
     tilt = {"collar_up": 0.0, "heel_up": -100.0}.get(mode, TILT)
     if tilt:
@@ -370,12 +423,30 @@ def demo_script(ctx):
                 yield from R_.move(home - 0.02 * axis, t=HALF)
         yield from R_.move(home, t=HALF)
         yield from R_.wait(0.6)
+    if mode == "wide_toe_first":  # shake on until nothing is left in
+        for _ in range(4):
+            yield from R_.move(home + 0.03 * axis, t=HALF)
+            yield from R_.move(home - 0.03 * axis, t=HALF)
+            yield from R_.move(home + AMP * stroke, t=HALF)
+            yield from R_.move(home - AMP * stroke, t=HALF)
+        yield from R_.move(home, t=HALF)
+        yield from R_.wait(0.6)
     if tilt:
         yield from R_.arc(R_.at(), axis, -tilt, t=abs(tilt) / 40.0, label="back upright")
+    if ROLL and mode != "on_side":  # the shoe sticks in the pinch rolled about its length after the shake: roll the hand back
+        yield from R_.arc(R_.at(), along, ROLL, t=abs(ROLL) / 40.0, label="roll the sole level")
     if mode == "on_side":
         yield from R_.arc(R_.at(), along, 80.0, t=2.0, label="roll onto its side")
-    if mode == "drop":
-        yield from R_.move(g0 + [0.0, 0.0, 0.10], t=1.5)
+    if mode in ("drop", "drop_low", "drop_25mm"):
+        yield from R_.move(g0 + [0.0, 0.0, {"drop": 0.10, "drop_low": 0.03, "drop_25mm": 0.025}[mode]], t=1.5)
+        yield from R_.open(t=0.2)
+        yield from R_.move(R_.at() + [0.0, 0.0, 0.08], t=1.0)
+        yield from R_.wait(4.0)
+        print("[shoe] END " + json.dumps({"mode": mode, **TRIAL.last}), flush=True)
+        return
+    if mode == "toe_first":
+        yield from R_.move(g0 + [0.0, 0.0, TOE_DZ], t=1.5)
+        yield from R_.arc(R_.at(), axis, TOE_ANG, t=1.0, label="toe down first")
         yield from R_.open(t=0.2)
         yield from R_.move(R_.at() + [0.0, 0.0, 0.08], t=1.0)
         yield from R_.wait(4.0)
@@ -383,9 +454,47 @@ def demo_script(ctx):
         return
     if mode != "on_side":
         yield from R_.move(g0 + [0.0, 0.0, 0.006], t=2.0, label="set it down")
-        yield from R_.move(g0 + [0.0, 0.0, 0.002], t=0.6, label="sole on the table")
+        yield from R_.move(g0 + [0.0, 0.0, SETDZ], t=1.5, label="sole on the table")
+        yield from R_.wait(1.0)
+        if mode != "toe_first" and COMP:
+            yield from R_.arc(R_.at(), axis, COMP, t=1.0, label="heel down, sole flat")
     yield from R_.open()
-    yield from R_.move(R_.at() + [0.0, 0.0, 0.09], t=1.2, label="hand up off the tab")
+    if mode == "wide_toe_first":  # the shoe is emptied and set down as in full; then gripped across the heel's two sides, lifted, lowered toe first with the heel about 5 cm up, and let go
+        wg = d.tilted(float(os.environ.get("SHOE_WTH", "0")), SHOE_YAW)  # fingers down, closing across the shoe
+        wx = float(os.environ.get("SHOE_WX", "0.045"))
+        w0 = shoe_to_world((wx, 0.0, float(os.environ.get("SHOE_WZ", "0.05"))))
+        yield from R_.move(w0 + [0.0, 0.0, 0.08], grip=wg, finger=d.FINGER_OPEN, t=0.8, label="above the heel")
+        yield from R_.move(w0, t=0.8, label="around the heel's sides")
+        yield from R_.close(2 * half_w(wx), PINCH_N, label="pinch the heel's sides")
+        yield from R_.move(R_.at() + [0.0, 0.0, float(os.environ.get("SHOE_WLIFT", "0.07"))], t=1.0, label="lift")
+        yield from R_.arc(R_.at(), np.cross(along, [0.0, 0.0, 1.0]), TOE_ANG, t=1.0, label="toe down first")
+        yield from R_.open(t=0.2)
+        yield from R_.move(R_.at() + [0.0, 0.0, 0.08], t=1.0)
+        yield from R_.wait(4.0)
+        print("[shoe] END " + json.dumps({"mode": mode, **TRIAL.last}), flush=True)
+        return
+    if mode == "collar_hook_drop":  # emptied and set down as in full; then both fingertips go into the collar opening and spread against its inner walls, lift 5 cm, and ease off so the shoe slides off
+        wg = d.tilted(0.0, SHOE_YAW)
+        wx = 0.06
+        w0 = shoe_to_world((wx, 0.0, 0.07))
+        inner = 2 * (half_w(wx) - T)
+        yield from R_.move(w0 + [0.0, 0.0, 0.08], grip=wg, finger=d.FINGER_OPEN, t=0.8, label="above the collar")
+        yield from R_.close(0.03, 5.0, t=0.4, label="fingers together")
+        yield from R_.move(w0, t=0.8, label="into the collar")
+        yield from R_.close(inner, -PINCH_N, label="spread against the inner walls")
+        yield from R_.move(R_.at() + [0.0, 0.0, 0.05], t=1.0, label="lift 5 cm")
+        yield from R_.close(0.03, 5.0, t=0.3, label="ease off")
+        yield from R_.wait(4.0)
+        print("[shoe] END " + json.dumps({"mode": mode, **TRIAL.last}), flush=True)
+        return
+    if mode == "relift_3cm":
+        yield from R_.close(BACK, PINCH_N, label="pinch again")
+        yield from R_.move(R_.at() + [0.0, 0.0, 0.03], t=1.0, label="lift 3 cm")
+        yield from R_.open(t=0.2)
+        yield from R_.wait(3.0)
+        print("[shoe] END " + json.dumps({"mode": mode, **TRIAL.last}), flush=True)
+        return
+    yield from R_.move(R_.at() + [0.0, 0.0, 0.09], t=1.2, label="hand up off the heel")
     yield from R_.move(R_.at() - 0.09 * axis, t=1.0, label="hand clear")
     yield from R_.wait(3.0)
     print("[shoe] END " + json.dumps({"mode": mode, **TRIAL.last}), flush=True)
