@@ -1,0 +1,23 @@
+{
+  "title": "Slide a turner under one egg inside a 65 mm deep holding tray, cover held clear, set it on the muffin and re-cover",
+  "category": "Impact on jobs",
+  "keywords": [
+    "egg",
+    "turner",
+    "spatula",
+    "holding tray",
+    "food pan cover",
+    "breakfast sandwich",
+    "fast food",
+    "bimanual"
+  ],
+  "instruction": "Take the cover off the egg tray, put one egg on the muffin with the turner, and put the cover back on the tray.",
+  "context": "Taking a held egg out of its covered tray and setting it on the muffin is a step in every egg breakfast sandwich, done by the 641,070 fast-food cooks and many of the 3,854,050 fast-food and counter workers in the US (BLS OEWS, May 2025), whose O*NET Core tasks include 'Cook and package batches of food, such as hamburgers or fried chicken, prepared to order or kept warm until sold' (35-2011.00). Cooked egg is kept in a covered 1/3-size tray so that the cover keeps the moisture in, so the cover comes off for each egg and goes straight back. The hard part is inside the tray: two 89 mm eggs leave 113 mm free at its near end, so the 102 mm blade must come down over the 65 mm wall tipped about 20 degrees and lie flat on the floor to slide under the egg's 3 mm rounded edge, then carry the 55 g egg about 32 cm and set it within 12 mm of the heel's centre, while the other hand holds the 0.22 kg cover clear.",
+  "setup": "Centimetres from the midpoint between the arm bases: x forward, y to the robot's left, heights above the counter top. (1) A 1/3-size polycarbonate food pan, 325 x 176 mm at the rim, 296 x 150 mm inside, 65 mm deep, 3 mm walls and floor, 0.36 kg, loose on the counter, centred at (40, 2) with its long side along x. (2) Its flat lift-off cover, 325 x 176 x 3 mm, seated on the rim with a 6 mm deep skirt 4 mm clear of the walls and a moulded grip bar at its centre (60 mm along x, 25 mm across, 30 mm high), 0.22 kg. (3) Two round cooked eggs, 89 mm across and 12 mm thick with 3 mm rounded edges, 55 g each, on the pan's floor at its far end, centres at (41.0, 2) and (50.2, 2); the pan's near 113 mm is free. (4) A solid stainless offset turner: blade 102 mm long (tip to back) and 127 mm wide, 2.5 mm thick, bevelled to 0.6 mm at the tip; a 130 x 22 x 14 mm handle 65 mm above the blade and 30 mm behind it; 0.17 kg. It lies on the counter on its blade's back edge and its handle's end (tip up about 20 degrees), blade centre at (50, -16), tip toward +x. (5) A toasted English muffin heel, 95 mm across and 22 mm high, 30 g, on an open sandwich wrapper (18 x 18 cm) centred at (36, -30). Two YAM arms with parallel grippers.",
+  "scoring": "Scored on the end state; four failures void the run (0) whenever they happen. 0.3: the egg is out of the tray, resting on the turner's blade. 0.6: the egg rests on the muffin heel, flat within 10 degrees, its centre within 12 mm of the heel's (real trial: overhead phone camera over a printed centre mark with ruler tape), having gone from the pan to the blade to the heel (an egg that skips the blade, is off all three for more than 0.5 s, or slides off the blade from more than 3 cm above the heel's top (real trial: a side phone camera at counter height filming a vertical ruler tape beside the muffin), such as carried in the fingers, pushed or dropped, scores 0). 1.0: that, and the cover seated back on the pan (within 2 mm in height and 8 mm across, tilted under 1 degree; real trial: a 2 mm feeler gauge along the rim) with the other egg still inside. Void: the egg comes out of the tray while the cover is not held clear (its lowest point under 10 mm above the rim (read on the same side camera), or its centre under 10 cm from the pan's); the cover set down on the counter (lowest point under 2 cm, off the pan); an egg touches the counter; the other egg leaves the pan.",
+  "run_limit": "1200 steps (60 s at 20 Hz)",
+  "reset_notes": "Nothing is random: every item starts at its mark.",
+  "fidelity": "Rigid bodies on GPU at 20 Hz control. The eggs are rigid discs with 3 mm rounded edges: a held egg is firm and rides fully on the blade; a real trial uses a food-replica egg disc of the same size, with its friction on the pan and the steel measured and set here. Friction per body (egg 0.25, steel 0.25, pan 0.35, muffin 0.9; a pair takes the mean) and the pan, turner and egg masses are estimates; the cover's 220 g is a maker figure. Heat and steam are not modelled.",
+  "scores": "Demo: 1.0 (scripted, 631 steps). Lazy routes on GPU: nothing 0.0; egg pinched out by the fingers, slow or fast 0.0; egg tipped off the blade from 10 cm up 0.0; cover set on the counter 0.0 (void); cover slid along the rim, not held 0.0; cover never put back 0.6. Dream-1: 0.0 in its 1,200 steps.",
+  "media": "M-B2N66Z"
+}
