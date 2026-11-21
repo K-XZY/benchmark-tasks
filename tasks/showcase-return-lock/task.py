@@ -3,11 +3,11 @@ outer one, and push the keyless plunger lock in until it latches.
 
 A single-watch case (9.7 x 7.6 x 7.1 cm) goes back in a countertop showcase, 24 x 12 x 18 in (61 x 30.5 x 45.7 cm; Webstaurant 89129359 locking countertop display case), aluminium frame and 1/4 in
 glass, stands on the counter with its sliding back doors toward the arms. Its two bypassing glass doors, 31 x 40 cm each, run in a double track.
-A CRL KML41-style keyless plunger lock sits in the outer door near the overlap: pushed in 12 mm against its spring, it latches, its tip standing
+A C.R. Laurence KML41 keyless plunger lock sits in the outer door near the overlap: pushed in 12 mm against its spring, it latches, its tip standing
 beside the inner door's edge so that neither door can slide.
 
     python demokit.py task.py OUT --mode full
-    python demokit.py task.py OUT --no-record --mode knock,near_tier,doors_open,no_lock,inner_open,hand_on
+    python demokit.py task.py OUT --no-record --mode knock,near_tier,drop_high,slide_drop,loose_slide,doors_open,no_lock,inner_open,hand_on
 """
 
 from __future__ import annotations
@@ -89,8 +89,9 @@ ON_SPOT = 0.025  # the box's centre within 2.5 cm of the spot's centre on both a
 SHUT = 0.005  # a door within 5 mm of its closed stop
 BOX_UPRIGHT = 10.0
 TIPPED = 45.0  # the box on a side, or
-FALL_STEP = 0.008  # the box dropped: its base 8 mm lower than one control step (50 ms) before. A free fall of 1.6 cm or more always
-# puts 8 mm into one step; the demo lowers the box at most 5.6 mm a step. Either voids the run
+FALL_STEP = 0.008  # the box dropped: with no gripper holding it, its base 8 mm lower than one control step (50 ms) before, or falling faster than 0.55 m/s.
+# A free fall of 1.6 cm or more always does one of these; a box held by a real grasp is lowered, never dropped, however fast. Either voids the run
+FALL_SPEED = 0.55
 LET_GO = 0.005  # every point of both grippers at least 5 mm off the box
 HANDS_OFF = 0.010  # every point of both grippers and wrists at least 1 cm outside the case's outline (with its pull and lock)
 
@@ -339,15 +340,18 @@ class Trial:
                   f"{1000 * (OUTER_OPEN - qo):.1f} mm off their stops", flush=True)
         latched = self.latched and qp >= LATCH_AT  # read again each step from the plunger's place
         tilt = box.tilt_deg()
-        fell = self.box_z is not None and self.box_z - float(box.pos[2]) > FALL_STEP
+        hp = hand_points(env)
+        loc = box.to_local(hp) if len(hp) else hp
+        let_go = box_gap(loc, (-BOX[0] / 2, -BOX[1] / 2, 0.0), (BOX[0] / 2, BOX[1] / 2, BOX[2])) >= LET_GO
+        held = env is not None and hasattr(env, "unwrapped") and any(
+            gk.held(m.fingertips(env), box, g, resting=False) for g in BOX_GRIPS)  # a real grasp on the box, either way round
+        fell = (not held and self.box_z is not None
+                and (self.box_z - float(box.pos[2]) > FALL_STEP or float(box.lin_vel[2]) < -FALL_SPEED))  # a held box is lowered, not dropped
         self.box_z = float(box.pos[2])
         self.tipped.trip(tilt > TIPPED or fell)
         stands = [m.state(env, f"stand{k}") for k in range(len(STAND_YS))]
         moved = [float(np.hypot(st.pos[0] - STAND_X, st.pos[1] - y)) for st, y in zip(stands, STAND_YS)]
         self.knocked.trip(any(d > STAND_MOVED for d in moved) or any(st.tilt_deg() > STAND_TIPPED for st in stands))
-        hp = hand_points(env)
-        loc = box.to_local(hp) if len(hp) else hp
-        let_go = box_gap(loc, (-BOX[0] / 2, -BOX[1] / 2, 0.0), (BOX[0] / 2, BOX[1] / 2, BOX[2])) >= LET_GO
         base_z = float(box.pos[2] - TOP)
         on_spot = bool(abs(box.pos[0] - SPOT[0]) <= ON_SPOT and abs(box.pos[1] - SPOT[1]) <= ON_SPOT and -0.003 <= base_z - FLOOR_Z <= 0.006
                        and tilt <= BOX_UPRIGHT and let_go)
@@ -379,6 +383,9 @@ def score(objects) -> float:
 
 # -- the demo ---------------------------------------------------------------------------------------------------------------------------------------
 
+BOX_GRIPS = (gk.Grip(half=BOX[1] / 2, across="y", air=0.0005,  # a pad within 0.5 mm of the box or pressed into it: jaws eased 1 mm wider do not count as holding
+                      centre=(0.0, 0.0, BOX[2] / 2), lo=(-BOX[0] / 2, -math.inf, 0.0), hi=(BOX[0] / 2, math.inf, BOX[2])),
+             gk.Grip(half=BOX[0] / 2, across="x", air=0.0005, centre=(0.0, 0.0, BOX[2] / 2), lo=(-math.inf, -BOX[1] / 2, 0.0), hi=(math.inf, BOX[1] / 2, BOX[2])))
 BOX_TCP = 0.050  # the tool point this high above the box's base when held: the pads on its upper sides
 BOX_SQUEEZE = 20.0  # N a finger on the box
 CARRY = 0.120  # the box's base this high over the counter while carried (plus 2 cm): 5 cm over the riser (9.1 cm), level with the watch stands
@@ -396,7 +403,7 @@ def demo_script(ctx):
     door's bar pull, slides the door 29 cm to its stop, lets go, and pushes the plunger's head in with its closed fingertips until it latches.
     Both hands draw back out of the case's outline.
 
-    Check modes (TASK_DEMO): `knock`: the box carried in 7 cm off the gap, into a watch stand; `near_tier`: the box set down on the riser between the stands, the rest done; `drop_high`: the box let go 4 cm above the deck on its spot, the rest done;
+    Check modes (TASK_DEMO): `knock`: the box carried in 7 cm off the gap, into a watch stand; `near_tier`: the box set down on the riser between the stands, the rest done; `drop_high`: the box let go 6 cm above the deck on its spot, the rest done; `slide_drop`: the same, but the jaws only widen to 8 mm more than the box, so the fingertips stay within 5 mm of it as it falls; `loose_slide`: the box let go 3 cm above its spot with the jaws eased to 4 mm more than its width (2 mm a side), so it slides through them;
     `doors_open`: the box on its spot, both doors left open; `no_lock`: all but the plunger; `inner_open`: the inner door is left open, the outer shut and the plunger pushed; `hand_on`: all done, the right
     fingertips left on the plunger's head."""
     import demokit as d
@@ -424,14 +431,20 @@ def demo_script(ctx):
     print(f"[showcase] in: {TRIAL.report}", flush=True)
     if gy != SPOT[1]:
         yield from l.move(np.array([px, SPOT[1], cz]), t=1.0, label="left: across to the spot")
-    high = 0.04 if mode == "drop_high" else 0.0  # `drop_high`: let go with the box's base 4 cm above the deck
+    high = 0.05 if mode in ("drop_high", "slide_drop") else (0.03 if mode == "loose_slide" else 0.0)  # `drop_high`: let go with the box's base 6 cm above the deck
     yield from l.move(np.array([px, SPOT[1], TOP + floor + BOX_TCP + 0.01 + high]), t=1.5, label="left: down toward the spot")
     for _ in range(0 if high else 20):  # lower 1.5 mm a step until the box sits on the deck
         if float(ctx.state("box").pos[2] - TOP) - floor <= 0.002:
             break
         yield from l.move(l.at() - [0.0, 0.0, 0.0015], t=0.1, label="left: set the box down")
     yield from l.wait(0.3)
-    yield from l.open(t=0.5, label="left: let go of the box")
+    if mode == "loose_slide":  # jaws eased 2 mm a side: the box slides down through them
+        yield from l.close(BOX[1] + 0.004, 0.0, t=0.5, label="left: ease the jaws a little")
+        yield from l.wait(0.5)
+    elif mode == "slide_drop":  # jaws just wide of the box: no grasp, fingertips still within 5 mm of it
+        yield from l.close(BOX[1] + 0.008, 0.0, t=0.5, label="left: ease the jaws off the box")
+    else:
+        yield from l.open(t=0.5, label="left: let go of the box")
     yield from l.move(l.at() - 0.06 * ax, t=0.8, label="left: back off the box along the fingers")
     yield from l.move(l.at(), finger=d.FINGER_CLOSED, t=0.4, label="left: close the fingers, narrow for the gap")
     yield from l.move(np.array([l.at()[0], SPOT[1], cz]), t=0.8, label="left: up to the gap's height")
