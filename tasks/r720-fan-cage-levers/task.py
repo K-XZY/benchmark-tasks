@@ -13,7 +13,7 @@ The plugs and sockets are real pins and square holes, so the end only goes down 
 springs (6 N a pad at rest, 10 N at the seat; estimate) that stand for the plugs' resistance. Nothing is applied by code. The demo reads the assembly's pose and the lever angles.
 
     python demokit.py task.py OUT
-    python demokit.py task.py OUT --no-record --mode none,drop,one,nocam     lazy routes
+    python demokit.py task.py OUT --no-record --mode none,drop,drop15,drop5,drop3,drop5close,one,nocam,press     lazy routes
 """
 
 from __future__ import annotations
@@ -253,6 +253,7 @@ class Tracker:
                 m.set_target(env, "chassis", f"pad{k}", PAD_PRE)  # the pads' springs, preloaded against their stops
         self.steps, self.last, self.hold, self.dropped, self.prev = 0, {}, 0, False, None
         self.peak_free = 0.0
+        self.h_touch, self.h_rel, self.pend, self.was_touch, self.why = None, 0.0, 0, False, ""
         self.tips = None
         self.poses = []
 
@@ -278,13 +279,36 @@ class Tracker:
         r["clear"], r["still"] = clear, bool(len(self.poses) == 11 and moved < 0.00025 and turn < 0.1)
         r["moved_mm"] = round(moved * 1000, 3)
         hmin = min(r["h_mm"].values()) / 1000.0
+        hmax = max(r["h_mm"].values()) / 1000.0
+        # touching: a finger point within 3 mm of the body box or of a lever's slab (at the lever's own angle), not nearness to the open levers' bounding box
+        dmin = float(np.min(np.linalg.norm(np.maximum(np.abs(lp) - np.array([AD / 2, AW / 2, ZH]), 0.0), axis=1)))
+        for sy, key in ((1, "L"), (-1, "R")):
+            th = math.radians(r["lever_deg"][key])
+            dv = lp - np.array([XL, sy * YP, Z0 - ZH])
+            v, n = np.array([0.0, -sy * math.sin(th), math.cos(th)]), np.array([0.0, sy * math.cos(th), math.sin(th)])
+            q = np.stack([dv[:, 0], dv @ n, dv @ v - LEV_L / 2], axis=1)
+            dmin = min(dmin, float(np.min(np.linalg.norm(np.maximum(np.abs(q) - np.array([LEV_W / 2, LEV_T / 2, LEV_L / 2]), 0.0), axis=1))))
+        touch = dmin < 0.003
+        if touch:
+            self.h_touch, self.pend, self.was_touch = hmax, 0, True  # its height while a finger is on it
+        else:
+            if self.was_touch:
+                self.h_rel, self.pend, self.was_touch = self.h_touch, 20, False  # a release: watch the next 1 s
+            if self.pend > 0:
+                self.pend -= 1
+                if self.h_rel - hmax > 0.002:
+                    self.dropped = True  # let go more than 2 mm above where it rests (the demo lets go within 1.2 mm)
+                    self.why = "release"
         if clear and hmin > 0.020:
             self.dropped = True  # let go with its lower end more than 2 cm above its seat
-        if float(st.lin_vel[2]) < -0.6:
+            self.why = self.why or "20mm"
+        if float(st.lin_vel[2]) < -0.3:
             self.dropped = True
+            self.why = self.why or "vel"
         z = float(st.pos[2])
         if self.prev is not None and (self.prev - z) / dt > 0.3:
-            self.dropped = True  # its pose fell faster than 0.3 m/s in one step: free fall from about 5 mm up or more (the demo lowers it at under 0.1 m/s)
+            self.dropped = True
+            self.why = self.why or "fall"  # its pose fell faster than 0.3 m/s in one step: free fall from about 5 mm up or more (the demo lowers it at under 0.1 m/s)
         self.prev = z
         if st.pos[2] < TOP + 0.005 or abs(st.pos[0] - XB) > 0.12 and st.pos[2] < TOP + 0.08:
             pass
@@ -296,7 +320,7 @@ class Tracker:
         self.hold = self.hold + 1 if (_tier(r) == 1.0 and not self.dropped) else 0
         r["hold"] = self.hold
         if self.steps % 10 == 0:
-            print("[fan] " + json.dumps({"mode": os.environ.get("TASK_DEMO", ""), "t": round(self.steps * dt, 2), **{k: v for k, v in r.items()}, "drop": self.dropped}), flush=True)
+            print("[fan] " + json.dumps({"mode": os.environ.get("TASK_DEMO", ""), "t": round(self.steps * dt, 2), **{k: v for k, v in r.items()}, "drop": self.dropped, "why": self.why, "dmin_mm": round(dmin * 1000, 1)}), flush=True)
 
 
 TRACK = Tracker()
@@ -403,21 +427,23 @@ def demo_script(ctx):
             yield from ctx.left.wait(0.3)
 
     yield from align()
-    if mode == "drop":
-        # let go 3 cm over the pins: it falls in (a lazy route)
+    if mode in ("drop", "drop15", "drop5", "drop3", "drop5close"):
+        # let go 3.4 cm over the pin tops (drop), or 15 / 5 / 3 mm over its rest height: it falls in; drop5close then closes both levers (lazy routes)
         s, _, _ = pose()
-        dz = (TOP + ZS + 0.040) - (s.pos[2] - ZH)
+        dz = (TOP + ZS + {"drop": 0.040, "drop15": 0.004 + 0.015, "drop5": 0.004 + 0.005, "drop3": 0.004 + 0.003, "drop5close": 0.004 + 0.005}[mode]) - (s.pos[2] - ZH)
         yield from ctx.together(*[A[a].move(A[a].at() + np.array([0.0, 0.0, dz]), t=2.0, label="down to 4 cm") for a, _ in arms])
         yield from ctx.together(*[A[a].open(label="let go") for a, _ in arms])
         yield from ctx.together(*[A[a].move(A[a].at() + np.array([0.0, 0.0, 0.06]), t=1.0, label="clear") for a, _ in arms])
         yield from ctx.left.wait(2.5)
-        return
+        if mode != "drop5close":
+            return
     # lower: fast to 25 mm over the pins' tops, then slowly, correcting as it goes
     s, _, _ = pose()
     dz = (TOP + PIN_TOP + 0.020) - (s.pos[2] - ZH)
-    yield from ctx.together(*[A[a].move(A[a].at() + np.array([0.0, 0.0, dz]), t=2.5, label="lower to the pins") for a, _ in arms])
-    yield from align()
-    for k in range(0 if os.environ.get("FAN_DRY") else 80):
+    if mode != "drop5close":
+        yield from ctx.together(*[A[a].move(A[a].at() + np.array([0.0, 0.0, dz]), t=2.5, label="lower to the pins") for a, _ in arms])
+        yield from align()
+    for k in range(0 if (os.environ.get("FAN_DRY") or mode == "drop5close") else 80):
         s, roll, yaw = pose()
         h = (s.pos[2] - ZH) - (TOP + REST)
         if h < 0.0012:
