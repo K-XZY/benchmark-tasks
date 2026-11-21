@@ -1,13 +1,13 @@
 """Set a can of soda in a seat-back fold-down cup holder: fold down its tray, swing out its ring, set the can in upright through the ring onto the tray, let go.
 
-A seat-back panel section (45 cm wide, 40 cm tall, 5 cm thick) stands on the bench facing the arms. On its face, a fold-up drink holder (marine type) at true size: a 98 x 95 mm
+A seat-back panel section (45 cm wide, 40 cm tall, 5 cm thick) stands on the bench facing the arms. On its face, a fold-up drink holder (Sea-Dog 588210-1 type) at true size: a 98 x 95 mm
 plate, 4 mm thick, with two folding parts. A ring (70 mm inside, 80 mm outside, band 8 mm tall) on two side arms pivots at the plate's top corners; a tray (72 x 84 mm, 3 mm floor,
-7 mm lips) hinges at its bottom edge. Stowed, the ring hangs flat against the plate and the tray stands folded up over it (33 mm deep in all; the stowed ring stands 10 mm off the plate). Open, both stand out level at hard
-stops: the ring's centre 60 mm out from the plate, its top face 16 cm above the bench and 84 mm over the tray floor. Stiff pivots hold each part where it is put (damping
+7 mm lips) hinges at its bottom edge. Stowed, the ring hangs flat against the plate and the tray stands folded up over it (24 mm deep in all; the stowed ring stands 1 mm off the plate). Open, both stand out level at hard
+stops: the ring's centre 51 mm out from the plate, its top face 16 cm above the bench and 84 mm over the tray floor. Stiff pivots hold each part where it is put (damping
 0.05 N m s/rad, estimate; weight left out), no spring. A 12 oz / 355 ml can (66 mm across, 122 mm tall, 370 g, rigid) stands on a 10 cm mat on the bench.
-Geometry is real: the can goes through the ring or it does not, with 2 mm a side, and stands on the tray. Code: only the scorer.
+Geometry is real: the can goes through the ring or it does not, with about 1.3 mm of play a side in the model (2 mm on the real holder), and stands on the tray. Code: only the scorer.
 
-    python demokit.py task.py OUT --no-record --mode full,none,ringonly,beside,hold,drop,onearm,ringfirst
+    python demokit.py task.py OUT --no-record --mode full,none,ringonly,beside,hold,drop,onearm,ringfirst,fastheld
     python demokit.py task.py OUT          (final: 640 x 360, the GPU to yourself)
 """
 
@@ -27,15 +27,15 @@ import mechkit as m  # noqa: E402
 from yam_arena.ik import smoothstep as ik_smooth  # noqa: E402
 
 SCENE = "station"
-INSTRUCTION = "Put the can of soda in the seat-back cup holder: fold down its tray, swing out its ring, and set the can upright through the ring onto the tray, then let go."
+INSTRUCTION = "Put the soda can in the seat-back cup holder: fold down its tray, swing out its ring, set the can upright through the ring onto the tray, and let go."
 SUCCESS_HOLD_S = 0.0  # the scorer holds the end state itself (HOLD_STEPS)
 SCORE_OVER = "end"
 TOP = d.TABLE_TOP
 MM = 1e-3
 
 # -- sizes (metres) ------------------------------------------------------------------------------------------------------------------------
-# Fold-up drink holder (marine type): a 98 x 95 mm plate; a ring (70 mm inside) on two side arms pivoted at the plate's top corners; a square tray hinged at the plate's bottom edge.
-# Folded (stowed), the ring hangs flat against the plate and the tray stands up over it (33 mm deep in all; E 15/16 in, 24 mm: the stowed ring stands 10 mm off the plate here). Open, both stand out level: the can stands on the tray, through the ring.
+# Fold-up drink holder (Sea-Dog 588210-1 type): a 98 x 95 mm plate; a ring (70 mm inside) on two side arms pivoted at the plate's top corners; a square tray hinged at the plate's bottom edge.
+# Folded (stowed), the ring hangs flat against the plate and the tray stands up over it (24 mm deep in all, E 15/16 in: the stowed ring stands 1 mm off the plate). Open, both stand out level: the can stands on the tray, through the ring.
 R_I, R_O, RB_H = 35.0 * MM, 40.0 * MM, 8.0 * MM  # the ring: 70 mm inside (drinks up to 2-3/4 in, 69.9 mm), 80 mm outside, its band 8 mm tall
 C_R = 42.0 * MM  # the ring's centre out from its pivot line
 ARM_X, ARM_Y = (-34.0 * MM, 0.0), (39.0 * MM, 43.5 * MM)  # the ring's side arms, from the pivot out, and their span across y
@@ -50,9 +50,9 @@ LINK_MASS, HINGE_DAMPING = 0.02, 0.05  # kg; N m s/rad (estimate): stiff pivots 
 PANEL_X = float(os.environ.get("CH_PANEL_X", "0.360"))  # the panel's face
 PLATE_X = PANEL_X - PLATE_T  # the plate's front face
 RING_TOP = TOP + float(os.environ.get("CH_RING_H", "0.16"))
-PIVOT = (PLATE_X - 18.0 * MM, 0.0, RING_TOP)  # the ring's pivot line (along y), at the open ring's top face; the holder's origin. 18 mm out: the stowed ring stands 10 mm off the plate, room for a fingertip behind it
+PIVOT = (PLATE_X - 9.0 * MM, 0.0, RING_TOP)  # the ring's pivot line (along y), at the open ring's top face; the holder's origin. 9 mm out: the stowed ring's 8 mm band stands 1 mm off the plate
 TRAY_Z = RING_TOP - RING_ABOVE  # the tray floor's top, open, and its hinge line
-TRAY_HX = PIVOT[0] - 8.0 * MM  # the tray's hinge line, 26 mm in front of the plate
+TRAY_HX = PIVOT[0] - 8.0 * MM  # the tray's hinge line, 17 mm in front of the plate
 TH = np.array([TRAY_HX - PIVOT[0], 0.0, TRAY_Z - RING_TOP])  # the tray's hinge in the holder's frame
 PLATE_Z = (TRAY_Z - RING_TOP - 6.0 * MM, 5.0 * MM)  # the plate's bottom and top in the holder's frame: 6 mm under the tray hinge to 5 mm over the ring pivot (95 mm)
 CAN_AT = (float(os.environ.get("CH_CX", "0.22")), float(os.environ.get("CH_CY", "-0.17")), TOP + 0.002)  # the can's base, on its mat (2 mm thick)
@@ -157,12 +157,13 @@ OBJECTS = [panel(), holder(), mat(), can()]
 
 # -- the scorer -----------------------------------------------------------------------------------------------------------------------------
 OPEN_DEG = 80.0  # 0.33: the ring and the tray each within 10 degrees of fully open (90)
-IN_DEG, IN_OFF_MM, IN_BELOW_MM = 10.0, 3.0, 3.0  # 0.67: the can's axis within 10 degrees of the ring's and of vertical, crossing the ring's top face within 3 mm of its centre (2 mm play), its base 3 mm or more below that face
+IN_DEG, IN_OFF_MM, IN_BELOW_MM = 10.0, 3.0, 3.0  # 0.67: the can's axis within 10 degrees of the ring's and of vertical, crossing the ring's top face within 3 mm of its centre (about 1.3 mm play in the model), its base 3 mm or more below that face
 SEAT_MM = 2.0  # 1.0: the base within 2 mm of the tray floor's top, tilt 10 degrees or less, both whole grippers 50 mm or more from the can and the holder, still, for 2 s
 CLEAR = 0.050
 HOLD_STEPS = 40  # 2 s at 20 Hz
 TIP_DEG = 30.0  # void: the can tilted past 30 degrees once off its mat
-DROP_SPEED = 0.30  # void: the can moving down faster than this, held or falling, once off its mat; read after every physics step
+DROP_SPEED = 0.30  # void: the can moving down faster than this while no hand holds it (a free fall of about 5 mm), once off its mat; read after every physics step
+HOLD_GAP, HOLD_SLIP = 1.0 * MM, 0.10  # a hand holds the can while its jaws are within 1 mm of the can's width with both fingers at its side, and the can moves down no faster than 0.1 m/s relative to that hand
 # gripper volume: a box over each whole gripper, in its own frame (palm, housing, pads, fingers, and the wrist link 12 cm back), sampled every 10 mm
 _LAT = np.array([(x, y, z) for x in np.arange(-0.04, 0.0401, 0.01) for y in np.arange(-0.03, 0.0301, 0.01) for z in np.arange(-0.12, 0.1501, 0.01)])
 
@@ -215,11 +216,34 @@ def clear_of(cs, hs, pts) -> tuple[float, float]:
     return can_d, float(np.min(np.minimum(np.minimum(ring, tray), frame)))
 
 
+def held(env, cs) -> bool:
+    """A hand holds the can: its jaws are closed on it (opened no more than 1 mm a side past the can (joint7 is one finger's travel), a point of each finger within 8 mm of the can: the points sit
+    4.5 mm inside the finger) and the can moves down no faster than 0.1 m/s relative to that hand, read at the can's origin. A can that slips or falls out of a hand is not held."""
+    base = env.unwrapped
+    origin = m._np(base.scene.env_origins[0])
+    tips = m.fingertips(env)
+    for k, side in enumerate(("left", "right")):
+        robot = base.scene[f"{side}_robot"]
+        if abs(float(m._np(robot.data.joint_pos)[0, robot.find_joints("joint7")[0][0]])) > CAN_R + HOLD_GAP:
+            continue
+        loc = cs.to_local(tips[12 * k:12 * k + 12])
+        dist = _cyl_dist(loc, CAN_R, 0.0, CAN_H)
+        if dist[:6].min() > 8.0 * MM or dist[6:].min() > 8.0 * MM:
+            continue
+        i = robot.find_bodies("gripper")[0][0]
+        pose, vel = m._np(robot.data.body_link_pose_w)[0, i], m._np(robot.data.body_link_vel_w)[0, i]
+        at = vel[:3] + np.cross(vel[3:6], np.asarray(cs.pos, float) - (pose[:3] - origin))
+        if float(cs.lin_vel[2]) - float(at[2]) >= -HOLD_SLIP:
+            return True
+    return False
+
+
 class Trial:
     def reset(self, env=None) -> None:
         self.tipped = self.dropped = False  # only the failures latch
         self.off_mat = False  # arms the void checks: the can's base has been more than 10 mm up
         self.held = 0
+        self.peak_down = 0.0  # the can's fastest downward speed once off its mat (m/s), for the log
         self.tier_now = 0.0
         self.info = {}
         self.n = 0
@@ -227,9 +251,12 @@ class Trial:
         if env is not None:
             self.step(env)
 
-    def _fall(self, cs) -> None:
-        if self.off_mat and float(cs.lin_vel[2]) < -DROP_SPEED:
-            self.dropped = True
+    def _fall(self, env, cs) -> None:
+        vz = float(cs.lin_vel[2])
+        if self.off_mat:
+            self.peak_down = max(self.peak_down, -vz)
+            if vz < -DROP_SPEED and not held(env, cs):
+                self.dropped = True
 
     def step(self, env) -> None:
         cs, hs = m.state(env, "can"), m.state(env, "holder")
@@ -238,7 +265,7 @@ class Trial:
         tilt = cs.tilt_deg()
         if base[2] - CAN_AT[2] > 0.010:
             self.off_mat = True
-        self._fall(cs)
+        self._fall(env, cs)
         if self.off_mat and tilt > TIP_DEG:
             self.tipped = True
         ring_deg, tray_deg = hs.deg("ring"), -hs.deg("tray")
@@ -268,7 +295,7 @@ class Trial:
             t = 0.0
         self.tier_now = t
         self.info = dict(ring=ring_deg, tray=tray_deg, tilt=tilt, off_mm=off * 1000, depth_mm=-bl[2] * 1000, floor_mm=on_floor * 1000, can_mm=can_d * 1000, holder_mm=hold_d * 1000, still=still, held=self.held,
-                         tipped=self.tipped, dropped=self.dropped)
+                         tipped=self.tipped, dropped=self.dropped, peak_down=self.peak_down)
         self.n += 1
         if self.n % 20 == 0 and os.environ.get("CH_TRACE"):
             report(f"step {self.n}")
@@ -284,7 +311,7 @@ class Trial:
         def update(*a, **k):
             r = orig(*a, **k)
             try:
-                trial._fall(m.state(env, "can"))
+                trial._fall(env, m.state(env, "can"))
             except Exception as e:  # the extra read must not break the run
                 if not trial.warned:
                     trial.warned = True
@@ -313,14 +340,15 @@ def report(tag: str) -> None:
     i = TRIAL.info
     if i:
         print(f"[ch] {tag}: tier {TRIAL.tier_now}, ring {i['ring']:.1f} deg, tray {i['tray']:.1f} deg open, can tilt {i['tilt']:.1f}, axis off centre {i['off_mm']:.1f} mm, base {i['depth_mm']:.1f} mm below the ring top, {i['floor_mm']:.1f} mm over the tray floor, "
-              f"hands {i['can_mm']:.0f} mm from can, {i['holder_mm']:.0f} mm from holder, still {i['still']}, held {i['held']}, tipped {i['tipped']}, dropped {i['dropped']}", flush=True)
+              f"hands {i['can_mm']:.0f} mm from can, {i['holder_mm']:.0f} mm from holder, still {i['still']}, held {i['held']}, tipped {i['tipped']}, dropped {i['dropped']}, fastest down {i['peak_down']:.2f} m/s", flush=True)
 
 
 # -- the demo -------------------------------------------------------------------------------------------------------------------------------
-MODES = ("full", "none", "ringonly", "beside", "hold", "drop", "onearm", "ringfirst")
-TRAY_PINCH = (float(os.environ.get("CH_TX", "0.002")), float(os.environ.get("CH_TZ", "0.030")))  # the pinch on the stowed tray's side lips, from its hinge (x, z)
-RING_PINCH = (float(os.environ.get("CH_RX", "0.0")), -C_R)  # the pinch on the hanging ring's sides, from its pivot (x, z): across its widest point
-PINCH_TILT = float(os.environ.get("CH_PINCH_TILT", "60"))  # the holder hand's fingers this far from straight down, toward the panel; jaws across y
+MODES = ("full", "none", "ringonly", "beside", "hold", "drop", "onearm", "ringfirst", "fastheld")
+TRAY_PINCH = (float(os.environ.get("CH_TX", "-0.006")), float(os.environ.get("CH_TZ", "0.030")))  # the pinch on the stowed tray's side lips, from its hinge (x, z): the fingers' far corner 3 mm short of the plate
+TRAY_TILT = float(os.environ.get("CH_TRAY_TILT", "60"))  # the holder hand's fingers this far from straight down, toward the panel, on the tray; jaws across y: the folding tray passes under the palm
+RING_PINCH = (float(os.environ.get("CH_RX", "-0.008")), -C_R + float(os.environ.get("CH_RZ", "-0.010")))  # the pinch on the hanging ring's sides, from its pivot (x, z): the pads across its widest point, the fingertips 1 mm short of the plate, the fingers' upper edge under the side arms
+RING_TILT = float(os.environ.get("CH_PINCH_TILT", "80"))  # and on the ring: near level, the fingertips almost square to the plate, the palm raised over the open tray
 GRIP_Z = float(os.environ.get("CH_GRIP_Z", "0.110"))  # the right hand closes on the can this far up it: seated, the fingers stay over the ring
 CAN_TILT = float(os.environ.get("CH_CAN_TILT", "60"))  # the can hand's fingers this far from straight down, toward the panel; the jaws close across y, so the can hangs plumb from the pinch
 CARRY = 0.035  # the can's base this far over the ring's top face before it goes down
@@ -331,7 +359,7 @@ def demo_script(ctx):
     to its stop, lets go; meanwhile right picks the can high; right centres it over the ring, lowers it straight through onto the tray, lets go; both back away); none;
     ringonly (tray and ring opened, nothing else: 0.33); beside (can stood on the bench by the panel: 0.33); hold (as full, right keeps hold of the can: 0.67);
     drop (let go 35 mm above the ring: void, 0); onearm (the right arm alone opens the tray and the ring, then sets the can); ringfirst (the ring swung out
-    with the tray still stowed over it: blocked, 0)."""
+    with the tray still stowed over it: blocked, 0); fastheld (as full, but the can, held, goes 12 cm up and back down in 0.3 s first: no void)."""
     mode = ctx.mode
     if mode not in MODES:
         raise ValueError(f"unknown mode {mode!r}")
@@ -342,8 +370,9 @@ def demo_script(ctx):
         return
     P = np.array(PIVOT)
     T = P + TH
-    gp = d.level(0.0) if PINCH_TILT >= 89.9 else d.tilted(PINCH_TILT, 0.0)  # level: the wrist camera rides above the fingers, clear of the panel
-    fdir = np.array([math.sin(math.radians(PINCH_TILT)), 0.0, -math.cos(math.radians(PINCH_TILT))])  # along the holder hand's fingers
+    def grip_dir(tilt):
+        """The holder hand's grip, and the direction along its fingers. Level: the wrist camera rides above the fingers, clear of the panel."""
+        return (d.level(0.0) if tilt >= 89.9 else d.tilted(tilt, 0.0)), np.array([math.sin(math.radians(tilt)), 0.0, -math.cos(math.radians(tilt))])
 
     def on_circle(c, v, deg):
         """The point c + v carried round the y line through c by `deg` (positive: top toward the arms)."""
@@ -353,27 +382,66 @@ def demo_script(ctx):
     tray_floor = lambda: tray_frame(ctx.state("holder"))[0][2]
     can_base = lambda: np.asarray(ctx.state("can").pos, float)
 
-    def swing(arm, c, v, deg, width, what):
+    def swing(arm, c, v, deg, width, what, tilt):
+        gp, fdir = grip_dir(tilt)
         start = on_circle(c, v, 0.0)
+        rv = (start - c)[[0, 2]]
         yield from arm.move(start - 0.06 * fdir, grip=gp, t=2.0, label=f"over the stowed {what}")
         yield from arm.move(start, t=1.0, label=f"fingers either side of the {what}")
         yield from arm.close(width, force=15.0, label=f"pinch the {what}")
         # carry the pinch round the pivot, the grip held: the part turns between the pads about the jaws' line
-        yield from arm.servo(lambda s: on_circle(c, v, deg * ik_smooth(min(1.0, s / 3.0))), tol=0.003, timeout=4.5, gain=0.3, label=f"swing the {what} to its stop")
+        yield from arm.servo(lambda s: on_circle(c, rv, deg * ik_smooth(min(1.0, s / 3.0))), tol=0.003, timeout=4.5, gain=0.3, label=f"swing the {what} to its stop")
         yield from arm.wait(0.3)
         yield from arm.open(t=0.5, label=f"let go of the {what}")
         yield from arm.move(arm.at() - 0.08 * fdir, t=1.2, label=f"back off the {what}")
         report(f"{what} open")
 
+    ring_deg = lambda: float(ctx.state("holder").deg("ring"))
+
+    def carry_ring(arm, v, rel_tilt, to_deg, label):
+        """Pinch the ring's band across its widest point and carry it rigidly round its pivot line to `to_deg`, the hand turning with it, so the fingers stay where they are on the ring.
+        `v`: the TCP from the pivot (x, z) and `rel_tilt`: the fingers from the ring's hanging direction, both as on the stowed ring."""
+        th = ring_deg()
+        gp = d.tilted(rel_tilt - th, 0.0)
+        fdir = np.array([math.sin(math.radians(rel_tilt - th)), 0.0, -math.cos(math.radians(rel_tilt - th))])
+        start = on_circle(P, v, -th)
+        yield from arm.move(start - 0.06 * fdir, grip=gp, t=1.5, label=f"fingers either side of the ring's band ({label})")
+        yield from arm.move(start, t=1.0, label=f"pads across the band ({label})")
+        yield from arm.close(2 * R_O, force=15.0, label=f"pinch the ring ({label})")
+        yield from arm.arc(P, (0.0, 1.0, 0.0), to_deg - th, t=max(1.0, (to_deg - th) / 30.0), label=f"swing the ring up and out ({label}), the hand turning with it")
+        yield from arm.wait(0.3)
+        yield from arm.open(t=0.5, label=f"let go of the ring ({label})")
+        back = np.array([math.sin(math.radians(rel_tilt - to_deg)), 0.0, -math.cos(math.radians(rel_tilt - to_deg))])
+        yield from arm.move(arm.at() - 0.06 * back, t=1.0, label=f"fingers back off the ring ({label})")
+
+    def swing_ring(arm):
+        """In two carries, so that the hand ends neither of them past pointing straight down: from the hanging ring, its fingertips near level and 1 mm short of the plate, to 60 degrees; then, pinched again with the fingers square to the band, to the stop."""
+        yield from carry_ring(arm, RING_PINCH, RING_TILT, 60.0, "first half")
+        yield from carry_ring(arm, (-2.0 * MM, -C_R - 12.0 * MM), 90.0, 91.0, "to its stop")
+        report("ring open")
+
+    def press_tray(arm):
+        """The fingertips, closed and pointing down, press the tray's floor 50 mm out from its hinge straight down onto its stop: the pinch's swing can leave it short."""
+        p = T + np.array([-0.050, 0.0, 0.0])
+        yield from arm.move(p + np.array([0.0, 0.0, 0.075]), grip=d.down(0.0), finger=d.FINGER_CLOSED, t=1.5, label="fingertips over the tray")
+        yield from arm.move(p + np.array([0.0, 0.0, -0.008]), t=1.5, label="press the tray down onto its stop")
+        yield from arm.wait(0.5)
+        yield from arm.move(p + np.array([0.0, 0.0, 0.075]), t=0.8, label="fingertips up")
+        report("tray pressed")
+
     def open_holder(arm):
-        yield from swing(arm, T, TRAY_PINCH, 92.0, T_W, "tray")
-        yield from swing(arm, P, RING_PINCH, -92.0, 2 * R_O, "ring")
+        yield from swing(arm, T, TRAY_PINCH, 92.0, T_W, "tray", TRAY_TILT)
+        yield from press_tray(arm)
+        yield from swing_ring(arm)
         side = 1.0 if arm is l else -1.0
         yield from arm.move(np.array([0.18, side * 0.22, TOP + 0.22]), t=2.0, label="clear of the holder, back by its own base")
 
     def pick_can(arm):
         yield from arm.pick(lambda: can_base(), GRIP_Z, width=2 * CAN_R, grip=d.tilted(CAN_TILT, 0.0), above=0.06, lift=0.05, force=20.0, t=2.5, label="can")
         yield from arm.move(arm.at() + np.array([0.0, 0.0, RING_TOP + CARRY - can_base()[2] + 0.01]), t=1.5, label="lift over the ring's height")
+        if mode == "fastheld":  # the can held firm, swung 12 cm up and brought straight back down in 0.3 s: a held descent far faster than 0.3 m/s
+            yield from arm.move(arm.at() + np.array([0.0, 0.0, 0.12]), t=1.0, label="up 12 cm, held")
+            yield from arm.move(arm.at() - np.array([0.0, 0.0, 0.12]), t=0.3, label="down 12 cm fast, held")
         report("can up")
 
     def level_up(arm):
@@ -416,7 +484,7 @@ def demo_script(ctx):
     elif mode == "ringonly":
         yield from open_holder(l)
     elif mode == "ringfirst":  # the ring swung out with the tray still stowed over it: the tray blocks it
-        yield from swing(l, P, RING_PINCH, -92.0, 2 * R_O, "ring")
+        yield from swing_ring(l)
     else:
         yield from ctx.together(open_holder(l), pick_can(r))
         yield from set_can(r, spot=(PANEL_X - 0.06, -0.12, TOP) if mode == "beside" else None)
