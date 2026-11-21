@@ -85,9 +85,9 @@ S = {}  # the made-up scene for the next step
 
 def door_pose():
     """The left door's link pose: turned open about its hinge line."""
-    R = Rz(-S["swing"])
+    R = Rz(S["swing"])
     hinge = np.array([T.XH, T.YH, 0.0])
-    return R, hinge - R @ hinge
+    return R, hinge + T.OFF - R @ hinge
 
 
 def gaps():
@@ -97,7 +97,7 @@ def gaps():
 
 def tool_at_screw():
     """The driver seated in the top screw, along its axis."""
-    R = np.column_stack([[0, 1.0, 0], [-1.0, 0, 0], [0, 0, 1.0]])
+    R = np.column_stack([[0, -1.0, 0], [1.0, 0, 0], [0, 0, 1.0]])
     tip = T.HEAD["t"]
     return Part(tip - R @ np.array([T.BIT, 0, 0]), R)
 
@@ -111,7 +111,7 @@ def hands_on(p):
     return np.array([p] * 24), np.array([p] * 30)
 
 
-m.state = lambda env, name: {"door": Part((0, 0, 0), np.eye(3), {"swing": -math.radians(S["swing"])}, w=(0, 0, S.get("door_w", 0.0))), "driver": S["driver"]}[name]
+m.state = lambda env, name: {"door": Part((0, 0, 0), np.eye(3), {"swing": math.radians(S["swing"])}, w=(0, 0, S.get("door_w", 0.0))), "driver": S["driver"]}[name]
 m.fingertips = lambda env: S["tips"]
 m.hand_body = lambda env: S["body"]
 T.link_pose = lambda env, link: door_pose()
@@ -137,7 +137,7 @@ def run(steps, swing=0.0, tips=None, body=None, driver=None, turn=None, k="t", s
 
 SEATED = tool_at_screw()
 AT_SCREW = hands_on(SEATED.to_world([[0.05, 0, 0]])[0])
-AT_PULL = hands_on(np.array([T.DX0 - 0.03, 0.03, TOP + 0.255]))
+AT_PULL = hands_on(np.array([T.DX0 - 0.03, T.LY1 - 0.03 + T.DY, TOP + 0.255]))
 
 
 def honest(turns=0.63, k="t"):
@@ -187,7 +187,7 @@ run(1, tips=AT_PULL[0], body=AT_PULL[1])
 case("hand left on the pull", run(40, tips=AT_PULL[0], body=AT_PULL[1]), 0.5, "0.5")
 reset()
 honest()
-palm = np.array([T.DX0 - 0.02, 0.10, TOP + 0.25])  # fingers 6 cm off the door, the palm on its face
+palm = np.array([T.DX0 - 0.02, 0.10 + T.DY, TOP + 0.25])  # fingers 6 cm off the door, the palm on its face
 case("palm on the door, fingertips clear", run(40, tips=np.array([palm - [0.08, 0, 0]] * 24), body=np.array([palm] * 30)), 0.5, "0.5: the whole gripper must be 30 mm clear")
 reset()
 honest()
@@ -195,6 +195,44 @@ case("driver left in the screw, hands clear", run(40, driver=SEATED), 0.5, "0.5:
 reset()
 honest()
 case("screw forced past its stop", run(40, stripped=True), 0.0, "gate: 0")
+
+# -- the screw rule itself: Thread.step on made-up driver poses, pushes and turns ------------------------------------
+class _Asset:
+    def set_joint_position_target(self, *a, **k):
+        pass
+
+
+m._joint = lambda env, part, link: (_Asset(), 0)
+m._tensor = lambda asset, v: v
+T._torque = lambda env, part, tau: None
+
+
+def screw_turns(push=15.0, tilt_deg=0.0, off=(0.0, 0.0, 0.0), short=0.0, roll_turns=0.6, steps=60):
+    """The driver's tip on the top head (or off it), pushed with `push` N, turned `roll_turns` about its own axis: the turns the screw takes."""
+    T.THREAD.reset()
+    a = math.radians(tilt_deg)
+    axis = np.array([-math.sin(a), -math.cos(a), 0.0])  # tilted toward the cabinet's front, as the driver comes in
+    tip = T.HEAD["t"] + np.asarray(off) - short * T.EIN
+    for i in range(steps + 1):
+        r = 2 * math.pi * roll_turns * i / steps
+        side0 = np.cross([0.0, 0.0, 1.0], axis)
+        side0 /= np.linalg.norm(side0)
+        up0 = np.cross(axis, side0)
+        side = math.cos(r) * up0 + math.sin(r) * side0  # turned about the axis: what _roll reads
+        R = np.column_stack([axis, side, np.cross(axis, side)])
+        drv = Part(tip - R @ np.array([T.BIT, 0, 0]), R)
+        seat = -push / T.SEAT_K  # the seat pressed toward -y
+        m.state = lambda env, name, drv=drv, seat=seat: {"door": Part((0, 0, 0), np.eye(3), {"seat_t": seat, "seat_b": 0.0, "swing": 0.0}), "driver": drv}[name]
+        T.THREAD.step(None)
+    return abs(T.THREAD.turns["t"])
+
+
+case("rule: seated on axis, 15 N, turned 0.6", float(screw_turns() > 0.55), 1.0, "the screw turns with the driver")
+case("rule: 14 deg off the axis, 15 N", float(screw_turns(tilt_deg=14.0) > 0.55), 1.0, "within 15 deg: turns")
+case("rule: 20 deg off the axis", float(screw_turns(tilt_deg=20.0) > 0.0), 0.0, "cams out: no turn")
+case("rule: pushed 5 N only", float(screw_turns(push=5.0) > 0.0), 0.0, "under 10 N: no turn")
+case("rule: hover-turn, 1.5 mm short, no push", float(screw_turns(push=0.0, short=0.0015) > 0.0), 0.0, "no turn")
+case("rule: tip 2.8 mm off the recess centre, 15 N", float(screw_turns(off=(0.0, 0.0, 0.0028)) > 0.0), 0.0, "unseated: no turn")
 
 bad = 0
 for name, got, want, text in CASES:
