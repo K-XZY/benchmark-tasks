@@ -6,7 +6,7 @@ both rings down.
 
 Rigid bodies and sprung joints. The box (7 kg) is a free body with 25 fixed 0.775 mm wafers in its colliders; the door is a free articulation (1.0 kg) with two
 D-rings of two joints each (turn, fold) and two sprung cushion pads. A latch is a rule: it engages when its D-ring is turned a quarter while its side of the
-door is within 1 mm of flush, and then holds that side flush with a force (the cam's hook); it is never counted if the ring is turned while the door is not flush.
+door is within 1 mm of flush, and then holds that side flush with a force (the cam's hook); it is never counted if the ring is turned while the door is not flush; a ring turned early must be turned back before it can latch.
 
 Debug:  python demokit.py task.py OUT --no-record --stills 20 --mode full
 Final:  python demokit.py task.py OUT
@@ -27,7 +27,7 @@ import demokit as d  # noqa: E402
 import mechkit as m  # noqa: E402
 
 SCENE = "station"
-INSTRUCTION = "Close the wafer shipping box. Carry its door by the two D-ring handles, set its left edge into the opening first and latch that side, then press the right side flush and latch it. Fold both D-rings down and let go."
+INSTRUCTION = "Close the wafer shipping box: carry its door by the D-rings, latch its left edge in first, press the right side flush, latch it, fold both rings down."
 SUCCESS_HOLD_S = 0  # the scorer holds the end state itself (20 steps)
 SCORE_OVER = "end"
 TOP = d.TABLE_TOP
@@ -154,6 +154,7 @@ class Trial:
     def reset(self, env=None) -> None:
         self.n = 0
         self.eng = {"L": False, "R": False}
+        self.pre = {"L": False, "R": False}  # a ring turned while its side is not flush: it must be turned back before it can latch
         self.order_bad = self.struck = self.dropped = self.moved = False
         self.pod0 = None
         self.lift_n = 0
@@ -188,8 +189,12 @@ class Trial:
         if max(comp) > 0.001 and abs(yaw) > STRIKE_YAW and not self.struck:
             self.struck = True
             print(f"[fosb] step {self.n}: the door met the wafers {yaw:.1f} deg out of square: 0", flush=True)
-        for n, flush in (("L", self.flushL), ("R", self.flushR)):
-            if not self.eng[n] and turn[n] <= TURNED and flush:
+        for n, flush, gap in (("L", self.flushL, self.gapL), ("R", self.flushR, self.gapR)):
+            if turn[n] <= -30.0 and abs(gap) > 0.002 and not self.eng[n]:
+                self.pre[n] = True
+            elif turn[n] > -10.0:
+                self.pre[n] = False
+            if not self.eng[n] and turn[n] <= TURNED and flush and not self.pre[n]:
                 self.eng[n] = True
                 print(f"[fosb] step {self.n}: latch {n} engaged (gap {self.gapL * 1000 if n == 'L' else self.gapR * 1000:.2f} mm)", flush=True)
                 if n == "R" and not self.eng["L"]:
@@ -203,7 +208,7 @@ class Trial:
             m.push(env, "door", (sum(fx), 0.0, 0.0), at=door.pos + R @ np.array([0.0, y, 0.0]))
         else:
             m.push(env, "door", (0.0, 0.0, 0.0))
-        if float(door.pos[2]) < DOOR_ZC - 0.06 and self.n > 5 and abs(float(door.pos[0]) - float(pod.pos[0])) > 0.02:
+        if float(door.pos[2]) < DOOR_ZC - 0.06 and self.n > 5:
             self.dropped = True
         dp = pod.pos - self.pod0
         self.lift_n = self.lift_n + 1 if float(dp[2]) > 0.005 else 0  # lifted off the plate for 0.5 s; a one-step contact pop is not a move
@@ -328,7 +333,7 @@ GRIP_N = float(os.environ.get('FOSB_GRIP', '40'))
 
 
 def demo_script(ctx):
-    """Modes: full; none (the arms wait); the lazy routes: rightfirst, oneside, crooked, ringsup."""
+    """Modes: full; none (the arms wait); the lazy routes: rightfirst, oneside, crooked, ringsup, preturn."""
     mode = ctx.mode
     stop = os.environ.get("FOSB_STOP", "")
     l, r = ctx.left, ctx.right
@@ -346,6 +351,8 @@ def demo_script(ctx):
     yield from ctx.together(l.move(bar["L"], t=1.0), r.move(bar["R"], t=1.0))
     yield from ctx.together(l.servo(bar["L"], timeout=1.0), r.servo(bar["R"], timeout=1.0))
     yield from ctx.together(l.close(0.012, force=GRIP_N), r.close(0.012, force=GRIP_N))
+    if mode == "preturn":  # lazy: both rings turned a quarter on the rest, then seat, press and fold
+        yield from ctx.together(l.turn(-106.0, axis=(1.0, 0.0, 0.0), t=2.5, label="turn left ring"), r.turn(-106.0, axis=(1.0, 0.0, 0.0), t=2.5, label="turn right ring"))
     c = Carry(ctx)
     p = c.pose()[0]
     yield from c.line(p + [0.0, 0.0, 0.045], 0.0, 1.0, label="lift")
@@ -365,7 +372,7 @@ def demo_script(ctx):
     yield from l.wait(0.5)
     if mode != "crooked":  # seat the left edge by feedback: push it in until its inner corners read at the rim (the box's pose and the door's, observed)
         px = POD0[0] + 0.001
-        for _ in range(12):
+        for _ in range(60 if mode == "preturn" else 12):
             if left_gap(ctx) >= -0.0003:
                 break
             px += 0.0007

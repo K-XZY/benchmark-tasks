@@ -2,7 +2,7 @@
 
 A 300 mm wafer shipping box (a front-opening shipping box, FOSB) is closed the way the box maker's manual gives: the door is carried by its two D-ring handles, its pivot edge (the robot's left) is set against the opening first and latched with a quarter turn, the far side is pressed flush against the wafer cushion's spring and latched, and both D-rings are folded down.
 
-**What this task adds.** Hold-and-turn tasks use one hand to hold a part still while the other hand turns a latch. Here the order is set by the manual, the door is a free 1 kg body carried by two handles, and the far side springs back out until it is held flush, so the second hand has to press against a spring while its own latch turns. Latching the far side first, one latch only, a door left cocked or rings left up all score less.
+**What makes it hard.** The order is set by the manual, the door is a free 1 kg body carried by two handles, and the far side springs back out until it is held flush, so the second hand has to press against a spring while its own latch turns. Latching the far side first, one latch only, a door left cocked or rings left up all score less.
 
 **How the demo does it.** Both hands pinch the two legs of a lifted D-ring (jaws across the ring's plane), lift the door off its rest and carry it, yawed 10 degrees, so that its left edge meets the opening's rim. The door's own pose steers both hands every step. The left edge goes to the rim, the door is swung about it until the cushion pads meet the wafers, the left hand turns its ring a quarter turn (the right hand holds the far side), the right hand presses the far side in 5 mm and turns its ring, both hands let go and back off, and each hand folds its ring down with closed fingertips.
 
@@ -16,36 +16,38 @@ From this folder, the scripted demo (the README command):
 
 ```bash
 python demokit.py task.py OUT --mode full                                      # the full-score reference, filmed (640 x 360)
-python demokit.py task.py OUT --no-record --mode none,rightfirst,oneside,crooked,ringsup   # failure checks, below
+python demokit.py task.py OUT --no-record --mode none,rightfirst,oneside,crooked,ringsup,preturn   # failure checks, below
 python demokit.py task.py OUT --mode full --jitter 0.01 --seed 1               # free parts shifted by up to 1 cm
 ```
 
 `FOSB_TRACE=1` prints the gaps, pad compressions, ring angles and latch state every 10 steps. The demo reads the door's and the box's poses from the simulator (as `demokit` allows); a policy gets the cameras only.
 
-**Result** (scripted, GPU physics on three lab PCs, 20 Hz): see the table. 560 steps (28 s of simulated time) to 1.0, against a limit of 3,000.
+**Result** (scripted, GPU physics on three machines, 20 Hz): see the table. 560 steps (28 s of simulated time) to 1.0, against a limit of 3,000.
 
 | Run | Setting | Score |
 |---|---|---|
-| README command, 3 runs | no jitter, 640 x 360, three lab PCs | 1.0, 1.0, 1.0 (560 steps each) |
+| README command, 3 runs | no jitter, 640 x 360, three machines | 1.0, 1.0, 1.0 (560 steps each) |
 | Jittered, 4 runs | `--jitter 0.01 --seed 1..4` (free parts shifted up to 1 cm) | 1.0 on all 4 |
-| RTX 5090 | README command, GPU to itself | 1.0 |
+| One more GPU | README command, GPU to itself | 1.0 |
+| Dream-1 (policy baseline, not the scripted demo) | one run, 24 rows per request, 3,000 steps | 0.0 |
 
-The slowest 30 steps took 9 s at 640 x 360 on a lab PC (about 0.3 s a step): with Dream-1's 8 s idle limit, send 12 or fewer steps per request. At 320 x 176 (Dream-1's size, `--store-frames` on a fast GPU alone) the slowest 30 steps took 5.3 s (0.18 s a step): `rows_per_request=24` takes 4.3 s plus 0.5 s of round trip, under 5 s.
+The slowest 30 steps took 9 s at 640 x 360 on a mid-range GPU (about 0.3 s a step): with Dream-1's 8 s idle limit, send 12 or fewer steps per request. At 320 x 176 (Dream-1's size, `--store-frames` on a fast GPU alone) the slowest 30 steps took 5.3 s (0.18 s a step): `rows_per_request=24` takes 4.3 s plus 0.5 s of round trip, under 5 s.
 
 | Failure check | What it does | Score |
 |---|---|---|
 | `none` | the arms wait | 0 |
 | `rightfirst` | presses the far side and latches the right ring first, then the left | 0 (the order rule) |
 | `oneside` | latches the left ring only, then folds both rings | 0.25 |
-| `crooked` | swings the door in only to 4 degrees out of square, latches the left, and turns the right ring without pressing the far side in | 0.25 (the right latch never engages: its side is not flush) |
+| `crooked` | swings the door in only to 4 degrees out of square, turns the left ring, then turns the right ring without pressing the far side in | 0 (no latch engages: with the door 4 degrees out of square the left edge stays more than 1 mm from flush (`FOSB_TRACE=1` prints it as `gapL`; a latch needs 1 mm or less), so the left ring does not latch, and no tier is reached) |
 | `ringsup` | does everything but leave the D-rings up | 0.75 |
+| `preturn` | turns both rings a quarter on the rest, then seats, presses and folds | 0 (on the last run the box moved 5.7 mm at step 525 under the grip offset, a sticky zero; the early-turned rings also do not latch until turned back, by the scorer's code only) |
 
 ## Building it for a real trial
 
-- **Box:** a used Entegris SB300 FOSB (385 x 333 x 337 mm), or any 300 mm FOSB, on the printed plate (the maker's three-pin coupling; the simulation holds the box by friction only).
+- **Box:** an Entegris SB300 FOSB (385 x 333 x 337 mm), or any 300 mm FOSB, on the printed plate (the maker's three-pin coupling; the simulation holds the box by friction only).
 - **Wafers: 25 aluminium discs in place of silicon** (below). No silicon wafer is needed.
 - **Door:** the box's own door (363.7 x 258.0 mm, the manual), with its own wafer cushion. The simulation's 25 mm thickness, 1.0 kg and the D-ring bar are estimates.
-- **Plate and rest:** printed; the rest is a 75 mm block with two 35 mm rails 28 mm apart. A pencil outline of the box on the plate reads the 5 mm movement limit.
+- **Plate and door rest:** before closing, the door stands upright on a 75 mm tall printed block (90 x 320 mm) in front of the box, its lower edge 75 mm above the bench and its centre 204 mm up, held from tipping between two 35 mm tall, 8 mm thick printed rails 28 mm apart. A pencil outline of the box on the plate reads the 5 mm movement limit.
 
 ### The wafer stack: 25 aluminium discs
 
@@ -69,9 +71,24 @@ Real silicon is out of the budget: the cheapest listed 300 mm dummy wafers are 1
 - The closing resistance is the cushion's own spring pressed against the 25 edges. The cushion is the real box's, so the resistance is the real one, once the edges stand where the wafers' would.
 - The mass does not enter: the cushion pushes the edges horizontally, and the scene's wafers are fixed in the box, so the simulation uses no wafer mass.
 
+### Cost of the real trial
+
+| Item | Cost (USD) | Source |
+|---|---|---|
+| 300 mm FOSB, new, 25-wafer (12 inch) | 484.95 | MSE Supplies, "MSE PRO 12 inch Front Opening Shipping Box (FOSB)", msesupplies.com |
+| The same, used: a 25-wafer 300 mm FOSB | about 30 plus shipping (about 100 assumed) | eBay item 355280761686 (a used 25-wafer 300 mm FOSB, listed at 29.99 USD, best offer; the listing may have ended, so a used box is not counted on) |
+| 25 aluminium discs (7 sheets, Zoro G702643793, 22.35 each) | 156 | Zoro |
+| Aviation snips and a file | about 15 | hardware store |
+| Printed plate, rest, protractor | a few | home printer |
+| Push-pull gauge and luggage scale (optional measurements) | about 112 and 10 to 25 | as in the table below |
+
+A trial costs about 660 USD with a new box; a used box at the listing's price would bring it to about 300 USD, but it is not counted on. The discs, 156 USD, are the whole stack and are reused. The measuring tools are shared, one-off items.
+
 ### Real cushion force and latch torque, against the simulator
 
-Measure each on the real box with the disc stack in place, once before the first trial, and write the real value in the last column. No score tier depends on either: the same rule (latch order, flush to a 0.5 mm feeler at four corners, the door's angle at first contact) scores the simulation and the real trial. The arms push about 20 N and grip about 40 N a finger, so the trial is feasible while the measured push at the right edge is under 20 N and the cam turns under a pinch of the ring. A value outside the simulator's estimate is a reason to re-run the scene with the measured figure, which the scene's constants (`PAD_K`, `CAM_NM` in `task.py`) take directly.
+**Published figures.** The box maker's manual (Entegris SB300 user manual, page 11, Door Interface Points, citing SEMI E62) states: "Torque required for key operation is 4.4 Newton meters maximum." That is the only published figure. No SEMI standard, maker datasheet or patent found gives the wafer cushion's push or a typical cam torque, so the simulator's values are estimates: cam 1 N m (the real value lies between a lightly greased cam and the manual's 4.4 N m maximum; no lower bound is published) and cushion 14 N at flush (10 to 18 N; two 875 N/m pads, 8 mm; the box's own value is not published). **The arm.** The YAM's elbow and wrist motors are DM4310 units (i2rt YAM Standard specification page, "Elbow / Wrist motors | 3x DM4310"); the DAMIAO selection handbook (2025) lists the DM-J4310-2EC V1.1 at 3 N m rated and 7 N m peak, so the wrist's peak is above the manual's 4.4 N m maximum, for the few seconds a quarter turn takes. The jaws close across the ring's legs, 20 mm from the stem, so the cam torque pushes each leg against a finger and tries to open the jaws: at 1 N m that is 25 N per finger, within the 40 N each finger holds, so the 40 N grip (`GRIP_N`, derived: 40 N x 2 x 20 mm = 1.6 N m) holds up to 1.6 N m, above the 1 N m the simulator uses (`CAM_NM` in `task.py`); at the manual's 4.4 N m maximum it would be about 110 N per finger, over that grip, so the wrist's 7 N m peak does not cover that worst case and the real trial uses a box whose cam turns at no more than 1 N m, the simulator's value (below). The i2rt page gives no payload; two YAM listings give 2 kg (about 20 N held out), which is above the 14 N cushion estimate. The wrist's own published peak is a motor figure, not a measured stall at the fingertip, so the trial still reads the real box first.
+
+**Real-trial measurement.** Measure each on the real box with the disc stack in place, once before the first trial, and write the real value in the last column. No score tier depends on either: the same rule (latch order, flush to a 0.5 mm feeler at four corners, the door's angle at first contact) scores the simulation and the real trial. The trial runs on a box whose push at the right edge reads under 20 N and whose cam turns at no more than 1 N m (a luggage-scale reading of 38 N at 26 mm), the simulator's own values; a box that reads higher is replaced by a lighter one or has its cam lightly greased. The measured value replaces the estimate: the scene's constants (`PAD_K`, `CAM_NM` in `task.py`) take it directly.
 
 | Value | Simulator (estimate) | How to measure it on the real box | Real |
 |---|---|---|---|
@@ -84,14 +101,14 @@ Measure each on the real box with the disc stack in place, once before the first
 ### Checking the door's angle at first cushion contact
 
 - **Camera.** A phone on a stand, 50 cm above the box's top, lens over the door's top edge and looking straight down, filming at 60 frames a second.
-- **Angle mark.** A printed paper protractor (1 degree marks, the 5 degree line in red, 150 mm radius) taped to the box's top. Its centre is on the opening's left (pivot) corner, and its 0 line runs along the rim's face.
+- **Angle mark.** A printed paper protractor (1 degree marks, the 5 degree line in red, 150 mm radius) printed on 1 mm card and taped to the box's top, its front 40 mm overhanging the rim face and 24 mm above the door's top edge. Its centre is on the opening's left (pivot) corner, and its 0 line runs along the rim's face.
 - **First contact.** The top disc's front edge is marked with a red paint pen. The first frame in which the cushion meets the red edge, seen through the clear top, is the frame of first contact. Read the door's top edge against the protractor in that frame. Past the 5 degree line scores 0.
 - **Resolution.** On a 1080p frame about 700 mm wide (a phone's main lens at 50 cm), 1 degree at 150 mm is 2.6 mm, about 7 pixels. The demo swings the door 11 degrees in 2.5 s, about 0.07 degrees a frame.
 - **The simulator's rule.** The same rule: the cushion touches the wafers with the door more than 5 degrees out of square. The simulator takes 1 mm of pad travel as touching. A door swung about its seated left edge first touches at about 3 degrees, because the pads stand 8 mm from flush, 137 and 227 mm from the pivot.
 
 ### Protecting the gripper pads, and handling
 
-- **Where the hands touch.** The demo touches the door only at its D-rings. Both hands pinch a lifted ring to carry the door, press the far side in through the ring and turn it. Each then folds its ring down with closed fingertips on top of the bar. The rings stand 36 mm proud of the door's face and 32 mm in from its side edges, so no finger meets a door edge.
+- **Where the hands touch.** The demo touches the door only at its D-rings. Both hands pinch a lifted ring to carry the door, press the far side in through the ring and turn it. Each then folds its ring down with closed fingertips on top of the bar. The rings stand 42 mm proud of the door's face (the bar's outer face) and 32 mm in from its side edges, so no finger meets a door edge.
 - **Pad cover.** Wrap each fingertip pad in one layer of cloth gaffer tape (about 8 USD a roll), changed every session, or slip a 2 mm TPU 95A sleeve over each finger (printed, a few grams of filament). Either keeps a ring's moulding marks or a stray door edge off the pads.
 - **Handling.** The discs have no fragile material. Wear gloves while cutting and filing them, and file every edge round before a disc goes into the box. If silicon wafers are ever used instead, handle them with a wafer wand or gloves by the edge only; a chipped wafer's edge is sharp.
 
@@ -109,10 +126,10 @@ Every dimension a hand or the scorer touches, the scene value, and its source. M
 | Box mass | 7 kg | Estimate |
 | Opening, W x H, centre above the datum | 340 x 250 mm, 184 mm | Estimate (the manual gives no opening size; the door overlaps it by 11.9 mm a side and 4 mm top and bottom) |
 | Rim depth; wafers' front edge behind the rim | 12 mm; 18 mm | Estimate |
-| D-ring: bar, legs, height proud | 12 mm square x 52 mm, legs 40 mm apart, 36 mm | Estimate; the manual shows the D-ring handles without dimensions |
+| D-ring: bar, legs, height proud | 12 mm square x 52 mm, legs 40 mm apart, 42 mm | Estimate; the manual shows the D-ring handles without dimensions |
 | D-ring spacing on the door | 300 mm (y = +/-15 cm) | Estimate |
-| Cam torque (latch) | 1 N m | Estimate, within the manual's 4.4 N m maximum |
-| Wafer cushion | two pads, 875 N/m each, 14 N together at flush (10 to 18 N) | Estimate; the manual gives no force |
+| Cam torque (latch) | 1 N m | Estimate; the manual's maximum is 4.4 N m (page 11), no typical value is published |
+| Wafer cushion | two pads, 875 N/m each, 14 N together at flush (10 to 18 N) | Estimate; no published figure |
 | Plate under the box | 20 mm | Estimate (a stand for the real kinematic coupling, which is not modelled) |
 
 Size check, printed from the constants in `task.py` (`POD_W`, `POD_D`, `POD_H`, `WIN_W`, `WIN_H`, `WIN_Z`, `DOOR_W`, `DOOR_H`, `WAFER_R`, `WAFER_T`, `WAFER_PITCH`, `WAFER_Z0`, `NWAF`) against the published figures; no simulator run is needed:
@@ -144,9 +161,18 @@ The review of this pull request asked for the points below; each is answered in 
 - **"Check and document the real cushion force and latch torque against the simulation estimates."** A push-pull gauge reads the cushion's push (14 N, and 7 N at the right edge, in the simulator), and a luggage scale on the D-ring's bar reads the cam torque (1 N m). The table has a column for the real values, and no score tier depends on either (Real cushion force and latch torque, above).
 - **"Clarify how the real-trial video checks the door's angle when the cushion first contacts the wafers."** An overhead phone at 60 frames a second, a printed protractor on the box's top centred on the pivot corner, and the top disc's front edge marked red. The frame in which the cushion meets the red edge is read against the 5 degree line (Checking the door's angle, above; `scoring`).
 
+The second and third reviews asked, twice, for the cushion force and cam torque, measured or cited:
+
+- **"Please measure and report the real box's cushion force at flush and the latch cam's turning torque with your disc stack, and show both are within the robot's grip and wrist torque, or adjust the setup."** No box is on hand, so no measurement is reported. Cited: the manual's cam maximum, 4.4 N m (page 11), the only published figure; the wrist's published peak, 7 N m (DM4310, DAMIAO handbook), which is above 4.4 N m but does not cover it, because the jaws close across the ring's legs 20 mm from the stem and the fingers' 40 N (`GRIP_N`) limit the cam torque to about 1.6 N m (25 N per finger at 1 N m, about 110 N at 4.4 N m); the arm's 2 kg payload, above the 14 N cushion estimate. The cushion's push has no published figure; it is stated as an estimate with a range (10 to 18 N). The real trial reads both on the box first (push-pull gauge, luggage scale) and uses a box at or under 20 N and 1 N m (Published figures, above).
+- **"Please give the cost of the shipping box and the 25 discs."** A new 12 inch FOSB is 484.95 USD (MSE Supplies) and the 25 discs are 156 USD (seven Zoro sheets), about 660 USD with snips; a used box (eBay item 355280761686, 29.99 USD plus about 100 shipping; the listing may have ended) would bring it to about 300 USD (Cost of the real trial, above).
+
 ## Scoring
 
 See `scoring` in `task.json`, and `Trial` in `task.py`. The scorer reads the door's four inner corners against the box's rim, the D-ring angles, the pads' compression and the box's position.
+
+## Importance: sources
+
+SEMI, "Global 300mm fab equipment spending to reach $227 billion in 2029" (3Q26 300mm Fab Outlook, Oct 2026): 2026 front-end 300 mm spending 149 billion USD, up 31%, 227 billion USD by 2029, https://www.semi.org/en/semi-press-release/global-300mm-fab-equipment-spending-to-reach-227-billion-in-2029-as-buildout-accelerates-semi-projects. SEMI, "2025 annual worldwide silicon wafer shipments" (Feb 2026): shipments up 5.8% to 12,973 million square inches, https://www.semi.org/en/semi-press-release/semi-reports-2025-annual-worldwide-silicon-wafer-shipments-and-revenue-results.
 
 ## Trademarks and sources
 
