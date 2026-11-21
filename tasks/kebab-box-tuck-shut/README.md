@@ -24,7 +24,7 @@ The demo steers on the box's pose and the lid's and leaf's joint angles, which a
 
 ## Scoring
 
-1.0 at the end: both tabs' barbs caught under the base's flange, every food piece inside the box's walls, the box flat, both whole grippers (fingers, pads, palm and housing) 3 cm clear of the box and everything still for 2 s. Otherwise the highest substep reached during the run: 0.7 the lid down (its front edge within 10 mm of the flange) with every food piece inside, so the seam is clean; 0.3 the lid down with food in the seam or outside the box, which is where a latch over the leaf ends. 0 if the box tipped past 30 degrees or left the counter.
+1.0 at the end: both tabs' barbs caught under the base's flange (real trial: lift the box by its shut lid; it stays shut), every food piece inside the box's walls (real trial: phone photo from directly above, judged against the inner wall), the box flat (real trial: phone level app on the lid), both whole grippers (fingers, pads, palm and housing) 3 cm clear of the box (real trial: a 3 cm wooden block as gauge) and everything still for 2 s (real trial: phone timer). Otherwise the highest substep reached during the run: 0.7 the lid down (its front edge within 10 mm of the flange; real trial: steel ruler against the flange, read from the front) with every food piece inside, so the seam is clean; 0.3 the lid down with food in the seam or outside the box, which is where a latch over the leaf ends. 0 if the box tipped past 30 degrees (real trial: phone level app on the box) or left the counter.
 
 "Inside" tests every vertex of every food piece and of both leaf parts against the base's inner walls (1 mm slack) and the shut lid's roof, so a leaf across the seam, a piece on the flange, on the lid or on the counter all fail it. "Caught" reads each barb's tip from its tab body's pose: past the notch's inner edge and under the flange's lower face, with the lid within 2 degrees of shut.
 
@@ -59,3 +59,8 @@ Dream-1 run (a model, not the scripted demo): 0, valid, one session, 2,000 steps
 - Reset (about 3 minutes): a fresh box with its lid open; weigh out about 350 g of cooked doner meat and salad from one shop and lay them to the photo of this layout, the leaf's tip over the front rim between the tabs. Bill of materials: the box (listing above, a few pence each), food from a kebab shop, a kitchen scale (about 10 pounds, 1 g resolution).
 - Scoring rules in the real trial are the simulated ones: "caught" is the box lifted by its shut lid staying shut; "clean seam" is a photo along the front showing no food between lid and flange; "released" is both grippers 3 cm clear and still for 2 s. Tab bend, lid spring and leaf spring are estimates here and should be measured on the real parts.
 - Protection: soft pad covers on the fingertips so the bagasse is not scored or crushed, and a tray under the box to catch food.
+
+## Importance figures and sources
+
+- Fast food and counter workers, about 3.7 million in the US, 3.1 million of them in restaurants: BLS Occupational Employment and Wage Statistics, "Fast Food and Counter Workers" (SOC 35-3023), https://www.bls.gov/oes/current/oes353023.htm
+- Core task "Wrap menu items such as sandwiches, hot entrees, and desserts for serving or for takeout": O*NET-SOC 35-3023.00, "Fast Food and Counter Workers", https://www.onetonline.org/link/summary/35-3023.00

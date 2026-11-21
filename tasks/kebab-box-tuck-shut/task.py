@@ -1,14 +1,14 @@
 """Shut a full kebab box: one hand folds the lettuce leaf hanging over the front rim back inside and holds it there while the other swings the lid down;
 the tuck hand slips out just before the lid's front wall arrives, and the lid hand presses the lid's front until its two tabs click under the base's flange.
 
-A moulded bagasse 9 x 6 in clamshell (230 x 158 mm footprint, 46 mm base, 80 mm shut) stands on the counter, its hinge along the back (+x), the lid
+A moulded bagasse 9 x 6 in clamshell (230 x 158 mm footprint, 46 mm base, 80 mm shut) stands on the counter, its hinge on the left edge (the back, +x in the box's frame), the lid
 sprung open on its hinge (rest angle 85 degrees, about 73 sagged). The hinge springs the lid open (about 0.1 N up at the front edge when shut), so the lid stays shut only
 when its tabs are caught. Each of the two tabs is a 20 mm wide strip hanging from the lid's front wall, sprung (a bend in the bagasse) and carrying a 2.5 mm barb on
 its inner face; it passes down through a notch in the base's front flange, the barb's ramp rides over the notch's inner edge, and the barb's ledge
 catches under the flange. In the base: about 350 g of doner kebab as rigid free bodies (nine meat portions, three lettuce pieces,
 three tomato slices, two onion rings, two chilli peppers) and one lettuce leaf in two parts: its base lies on the heap under a meat strip, its tip is
 hinged to it 10 mm inside the front rim and sprung (the leaf's own stiffness), sticking 23 mm out past the front wall (about 10 mm past the flange). Folded back in and let go, the tip
-springs back out over the rim, where the lid's front traps it and holds the lid 3 mm or more proud, so the barbs cannot reach under the flange.
+springs back out over the rim, where the lid's front traps it and holds the lid about 2 mm proud, so the barbs cannot reach under the flange.
 Code: the scorer (`Trial.step`, `judge`). The hinge, tab, notch and leaf are bodies, joints and collisions; the code stands in for nothing in the act.
 
 Debug:  python demokit.py task.py OUT --no-record --mode full,none,one_hand
