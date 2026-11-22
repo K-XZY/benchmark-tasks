@@ -23,5 +23,5 @@
   "fidelity": "Rigid bodies. Real UMI print meshes for the look; collision by a body box, wing hulls and boxes round each hole, so the soft fingers neither collide nor flex. The thread is a rule: once the tip reaches the nut on the holes' line, a joint leaves the screw only its turn (0.15 N m at any turning speed above 3 deg/s) and its slide; depth counts only as turned (0.8 mm a turn plus 0.5 mm play). Sim holes 5.4 to 5.8 mm (real 5.2 to 5.5). Once seated, fixed joints hold camera and screw.",
   "scores": "Demo: 1.0 (2,365 steps, 118.25 s; RTX 3090 Ti). push_seat (pushed to the seat) 0.5; no_turn 0.5; light_spin (knob held at 2 N while rolled) 0.5; slow_light_spin (the same, turned at 2 deg/s) 0.5; camera_only 0.25; none 0. Dream-1: 0.0.",
   "failures": "Screw pushed in to the seat without turning: 0.5 (depth counts only as turned). Camera set down facing away from the gripper's fingers, or a finger outside its gap: 0 (not interleaved). Screw tip more than 0.3 mm short of the nut's thread, or its axis off the holes' line: 0.25. Seated with a hand still on the camera or the knob: 0.75 until both whole grippers are 5 cm clear and everything is still for 1 s.",
-  "media": "M-236GJU"
+  "media": "M-CWJB3U"
 }
