@@ -1,0 +1,21 @@
+{
+  "title": "Tip a glass jar candle out of a gift box too snug to lift it from, then stand it upright on the table",
+  "category": "Societal relatability",
+  "keywords": [
+    "candle",
+    "gift box",
+    "unboxing",
+    "tip out",
+    "grip force",
+    "glass jar"
+  ],
+  "instruction": "The candle is too snug in its gift box to lift out: tip it out without dropping it, stand it upright on its base, and set the empty box aside.",
+  "context": "A boxed jar candle is unboxed by hand every time one is bought or given: more than 4 in 10 U.S. adults say they regularly buy scented candles (CivicScience), and about 35% of U.S. candle sales fall in the Christmas/Holiday season, much of it bought as gifts (National Candle Association). The box is cut to the jar, 1.5 mm a side, so no finger fits beside the glass. It cannot be lifted out: the person squeezes the box so the jar stays in, turns it over, brings the rim down to the table and loosens the grip until the jar slides out onto its rim, lifts the box away, then turns the jar upright and stands it on its base. Squeeze too little and the jar slides out mid-turn; loosen too high and a half-kilogram glass jar drops onto its rim.",
+  "setup": "Centimetres from the midpoint between the arm bases: x forward, y to the robot's left, heights above the table top. A Diptyque Classic Candle 190 g (Ambre): clear glass jar 9.0 cm tall, 7.7 cm across, 0.50 kg with its wax, stands upright in its square paperboard gift box, top open, at (40, -14). With 0.15 cm a side there is no room for a finger beside the glass, so the candle cannot be lifted straight out. The box: 8.0 cm square inside (specified 8.0 +/- 0.1 cm; a 1.5 mm paperboard carton of that size stands in for a gift box outside it), 10.0 cm deep, 0.15 cm board, 0.06 kg; the two walls facing x flex inward up to 0.3 cm under a squeeze (8 N/mm at mid-wall). The right arm works the box and the jar; the left arm is not needed.",
+  "scoring": "Scored over the run (real trial: a side camera at table height with a 3 cm tape mark, and a protractor card for the tilt). Both tiers need the box first turned over (tilted past 150 degrees) with the jar still in it and its lowest point at least 3 cm above the table. 0.5: the jar out on the table, on its rim or its base within 10 degrees of vertical and still, every point of the box at least 0.5 cm from it and no part of either gripper within 2 cm of it, held 2 s and still so at the end of the run. 1.0: the same with the jar standing on its base, opening up, within 10 degrees of vertical, and the box set down on the table and let go (no gripper within 1 cm of it), held 2 s and still so at the end of the run. Score 0: the jar comes down more than 3 cm from where it last stood still, both against the table and against the box, with no hand holding the bare glass (the glass riding with the hand, not sliding down through the fingers), or it leaves the table.",
+  "run_limit": "1200 steps (60 s at 20 Hz)",
+  "reset_notes": "Nothing is random: the box and jar start at their marks.",
+  "fidelity": "Jar 77 x 90 mm (maker), 0.50 kg (190 g wax + 0.30 kg glass by calculation). Box 80 mm inside (trial 79-81 mm), 100 mm deep, 1.5 mm board. Squeezed walls slide in up to 3 mm at 8 N/mm (plate upper bound 12 N/mm); the other walls are rigid. Friction glass-board 0.45, board 0.50 (TAPPI T 815 check). Full score holds at both ends of every trial range (README). The wrist sags about 2.5 cm under the turned box and under the held jar, so both set-down commands are below the table.",
+  "scores": "Demo 1.0 (765 steps, 38.25 s). Lazy: wait 0; box turned, not eased 0; eased 5 cm up 0 (drop); eased 2 cm up 1.0; jar left on rim 0.5; upright jar let go high 0 (drop); slow release 0 (slid in the hand). Dream-1 model: 0 (1,200 steps).",
+  "media": "M-SKKNB3"
+}
