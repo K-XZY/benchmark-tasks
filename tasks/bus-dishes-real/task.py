@@ -219,6 +219,7 @@ class Trial:
         self.fail = None
         self.dropped: set[str] = set()
         self.held = {n: False for n in PLATES}
+        self.pinched: set[str] = set()  # plates a closed hand has touched since they last came to rest
         self.release: dict[str, float] = {}  # plate -> its centre's height at the frame the jaws open, until it comes to rest
         self.touch_low: dict[str, float] = {}
         self.slow = {n: 0 for n in PLATES}
@@ -238,18 +239,26 @@ class Trial:
         if self.fail is None and seen["off"]:
             self.fail = f"{seen['off'][0]} left the table"
         for n in PLATES:
-            touching = (tip_gap(*poses[n], grip) if len(grip) else 9.0) < TOUCH  # held: a closed hand within 1 cm; the frame the jaws open is the release
+            gap = tip_gap(*poses[n], tips)
+            closed = (tip_gap(*poses[n], grip) if len(grip) else 9.0) < TOUCH
+            if closed:
+                self.pinched.add(n)
+            # held: a closed hand within 1 cm (its release is the frame the jaws open); a plate never pinched since it last rested is also held
+            # while any part of a hand is within 1 cm and it moves (carried on open fingers), released at the last such frame
+            touching = closed or (n not in self.pinched and gap < TOUCH and speeds[n] >= REST_V)
             if self.held[n] and not touching:
                 self.release[n] = self.touch_low[n]
             if touching:
                 self.release.pop(n, None)
                 self.touch_low[n] = seen["mid"][n]
             self.held[n] = touching
-            at_rest = speeds[n] < REST_V and tip_gap(*poses[n], tips) >= TOUCH  # resting on an open hand is not rest: the fall is measured to where the plate ends
+            at_rest = speeds[n] < REST_V and gap >= TOUCH  # resting on an open hand is not rest: the fall is measured to where the plate ends
             self.slow[n] = self.slow[n] + 1 if at_rest else 0
+            if self.slow[n] >= REST_STEPS:
+                self.pinched.discard(n)
             if n in self.release and self.slow[n] >= REST_STEPS:
                 fall = self.release.pop(n) - seen["mid"][n]
-                print(f"[bus] {n} came to rest, its centre {1000 * fall:.1f} mm below the last touch", flush=True)
+                print(f"[bus] {n} came to rest, its centre {1000 * fall:.1f} mm below where it was last held", flush=True)
                 if fall > DROP:
                     self.dropped.add(n)
         self.count = sum(1 for n in PLATES if seen["placed"][n] and n not in self.dropped and seen["gaps"][n] >= TOUCH and n not in self.release)
@@ -354,7 +363,7 @@ def plate_tilt(ctx, name: str) -> float:
     return float(math.degrees(math.acos(np.clip(ctx.state(name).rotation()[2, 2], -1.0, 1.0))))
 
 
-def take_plate(ctx, name: str):
+def take_plate(ctx, name: str, loose: bool = False):
     """Left: press the far rim down so the plate tips on its foot ring and its near rim rises. Right: slide level jaws round the raised rim, pinch, lift."""
     l, r = ctx.left, ctx.right
     up = np.array([0.0, 0.0, 1.0])
@@ -382,7 +391,10 @@ def take_plate(ctx, name: str):
     p, n = pinch()
     yield from r.move(p, t=1.5, label=f"{name}: fingers round the rim")
     yield from r.servo(p, tol=0.0015, timeout=1.0, label=f"{name}: fingers round the rim")
-    yield from r.close(0.0, SQUEEZE, t=0.8, label=f"{name}: pinch the rim")
+    if loose:  # lazy route: the jaws close only partway, so the plate is carried wedged on open fingers
+        yield from r.move(r.at(), finger=-WEDGE_OPEN, t=0.8, label=f"{name}: jaws partway round the rim")
+    else:
+        yield from r.close(0.0, SQUEEZE, t=0.8, label=f"{name}: pinch the rim")
     yield from r.wait(0.3)
     yield from l.move(l.tcp() + 0.08 * up, t=1.0, label=f"{name}: left off the rim")
     yield from r.move(r.at() + 0.08 * up, t=1.5, label=f"{name}: lift")
@@ -439,6 +451,14 @@ def lay_plate(ctx, name: str, k: int, phi: float | None = None, over: float = 0.
     tilt = plate_tilt(ctx, name)
     if tilt > lay + 1.0:  # the plate turns in the pinch as it goes down: once more for the rest
         yield from r.arc(edge, np.cross(up, a0), -(tilt - lay), t=1.5, label=f"{name}: lay it down the rest of the way")
+    for _ in range(2):  # laid nearly flat, the foot ring is lower than the rim edge it turned about: lower it onto the floor (or the first plate)
+        st = ctx.state(name)
+        drop = lowest(st.pos, st.rotation()) - floor
+        if drop < 0.003:
+            break
+        goal = r.at() - drop * up
+        yield from r.move(goal, t=1.0, label=f"{name}: foot down")
+        yield from r.servo(goal, tol=0.002, timeout=1.0, label=f"{name}: foot down")
     st = ctx.state(name)
     print(f"[bus] {name}: let go at tilt {plate_tilt(ctx, name):.1f} deg, lowest {1000 * (lowest(st.pos, st.rotation()) - floor):.0f} mm over its rest", flush=True)
     if not let_go:
@@ -477,12 +497,13 @@ def one_hand_take(ctx, name: str):
     print(f"[bus] {name}: one hand lifted it, lowest {1000 * (lowest(st.pos, st.rotation()) - TOP):.0f} mm over the table", flush=True)
 
 
-MODES = ("full", "none", "drop", "hold", "hover", "one_hand", "flop", "swing")
+MODES = ("full", "none", "drop", "hold", "hover", "one_hand", "flop", "swing", "wedge")
+WEDGE_OPEN = 0.0077  # m: the wedge route's finger joint, past OPEN_MAX: the rim rides loose between open jaws, never pinched
 
 
 def demo_script(ctx):
     """Modes: full; lazy routes: none, the arms wait; drop, each plate let go 10 cm over the tub's floor; hold, the second plate laid down but held;
-    flop, each plate let go at 13 deg from flat, its far edge on the floor; swing, let go at 30 deg; hover, the second plate let go with the jaws backed out only 4.5 cm; one_hand, the right hand alone drags the first plate to the table's near edge and takes it by the overhang."""
+    flop, each plate let go at 13 deg from flat, its far edge on the floor; swing, let go at 30 deg; hover, the second plate let go with the jaws backed out only 4.5 cm; wedge, each plate carried on jaws closed only partway (never a pinch) and let go 10 cm over the floor; one_hand, the right hand alone drags the first plate to the table's near edge and takes it by the overhang."""
     if ctx.mode not in MODES:
         raise ValueError(f"unknown mode {ctx.mode!r}")
     l, r = ctx.left, ctx.right
@@ -501,9 +522,9 @@ def demo_script(ctx):
     for k, name in enumerate(("plate_r", "plate_l")):
         if k:  # the same arm posture for each reach
             yield from to_joints(r, start[r], label="right back to its start")
-        yield from take_plate(ctx, name)
+        yield from take_plate(ctx, name, loose=ctx.mode == "wedge")
         last = k == 1
-        yield from lay_plate(ctx, name, k, over=0.10 if ctx.mode == "drop" else 0.0, let_go=not (last and ctx.mode == "hold"), back=0.045 if last and ctx.mode == "hover" else 0.06,
+        yield from lay_plate(ctx, name, k, over=0.10 if ctx.mode in ("drop", "wedge") else 0.0, let_go=not (last and ctx.mode == "hold"), back=0.045 if last and ctx.mode == "hover" else 0.06,
                        lay={"flop": 13.0, "swing": 30.0}.get(ctx.mode), at=OPEN_SPOT if ctx.mode in ("flop", "swing") else None)
     if ctx.mode in ("hold", "hover"):
         yield from to_joints(l, start[l], label="left clear")

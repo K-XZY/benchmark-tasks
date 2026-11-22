@@ -98,5 +98,9 @@ check("jaws open under the rim, the plate then falls 4.5 cm: dropped", run(done[
 # flop: the jaws open, the plate rests still on the open lower jaw 6 cm up, and drops 6 cm once the hand slides out
 perch = [(R0, hi, touching(hi), (0, 0))] * 10
 check("rests on the open jaw, then drops 6 cm when the hand leaves: dropped", run(done[:5] + held + perch + rest, open_after=8)[0:2], (0.4, {"plate_l"}))
+up = [0.0, 0.0, FLOOR + 0.016 + 0.10]
+carry = [(R0, up, touching(up), (0, 0.1))] * 5
+check("second plate carried on open fingers, never pinched, let go 10 cm up: a drop", run(done[:5] + carry + done, open_after=0)[0:2], (0.4, {"plate_l"}))
+check("open fingers resting still under a set-down plate, then withdrawn: set down", run(done[:5] + [(R0, L0, touching(L0), (0, 0))] * 5 + done, open_after=0)[0], 1.0)
 print("all ok" if not fails else f"{fails} FAILED")
 sys.exit(1 if fails else 0)
