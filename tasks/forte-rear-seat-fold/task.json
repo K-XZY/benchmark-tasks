@@ -1,0 +1,23 @@
+{
+  "title": "Fold a sedan's rear seatback from the trunk: one hand holds the spring-return knob, the other tips 9 kg past upright",
+  "category": "Societal relatability",
+  "keywords": [
+    "car",
+    "rear seat",
+    "seatback",
+    "fold down",
+    "trunk",
+    "lock knob",
+    "latch",
+    "Kia Forte"
+  ],
+  "instruction": "Pull and hold the seatback lock knob in the trunk, push the rear seatback forward past upright, and let it fold down onto the seat cushion.",
+  "context": "Folding a rear seat down to load something long through the trunk is a first-hand act for most drivers: the US had 240 million licensed drivers in 2024 (FHWA), and the Forte sedan alone sold 115,929 cars in the US in 2021 (Kia America full-year sales), with its 60/40 folding rear seat. Kia's Forte owner's manual gives the steps: lower the rear headrests, 'pull out the seatback locking knob in the trunk, then fold the seat toward the front of the vehicle.' The knob springs back: let go before the seatback leaves its striker and the latch catches again, so one hand holds the release while the other pushes the seatback, about 9 kg reclined 25 degrees, which needs about 19 N square to its top until it passes upright and gravity lays it on the cushion.",
+  "setup": "Positions in cm from the midpoint between the arm bases: x forward, y to the robot's left; heights above the bench top, which stands for the car floor at the trunk opening. (1) The 40% rear seatback of a 2019-2021 Kia Forte sedan (Kia part 89300M7330B4U): 55 wide (y -38 to 17), 60 tall, 10 thick, 9 kg, hinged at its foot at x 48, height 6, reclined 25 degrees toward the robot, its top at about x 22, height 60; outboard headrest in its lowest position, fixed to it. (2) The rear cushion top, x 54 to 108, under where the seatback folds; the folded stop is 113 degrees of swing. (3) A striker latch at the seatback's top corner holds it at the start. (4) The seatback lock knob, a flat pull tab 25 mm tall, 12 mm thick and 15 mm long on a 10 mm rod, on the trunk-side trim beside the seatback top (trim x 22.5 to 28.5, y 18.5 to 31, height 40 to 62), its face at x 20, y 27, height 52; it pulls 20 mm toward the robot against a return spring of about 7 N at full pull. Pulled 15 mm or more, the latch is free; let go, the latch catches the seatback again unless it has swung 5 degrees off the striker.",
+  "scoring": "Judged on the state at the end, from the seatback's hinge angle (0 when latched); nothing is remembered (real trial: digital angle gauge on the seatback, 0.1 degree). Off the striker: swung 5 degrees or more, which needs the latch released (0.33). Past upright: swung more than the 25-degree recline, so beyond vertical (0.67). Folded: within 10 degrees of the folded stop on the cushion, 113 degrees of swing (1.0).",
+  "run_limit": "1,200 steps (60 s at 20 Hz); the scripted demo reaches 1.0 at step 233 (11.65 s).",
+  "reset_notes": "About 30 s, nothing consumed: lift the seatback by its top and push it back until the latch clicks; check that the knob has sprung back. No hidden variables; no seed changes the scene.",
+  "fidelity": "Seatback size and 9 kg from the 2019-2021 Forte sedan 40% section (no CAD; README Sizes). Estimates, each run at both ends of its bound: mass 8-11 kg, recline 23-28 degrees, pull tab 15-20 mm long on a 10-20 mm rod, spring 5-10 N, release 10-19 mm, hinge drag, striker 3-7 degrees. The latch is a stiff joint lock freed while the knob is pulled 15 of 20 mm (no modelled hook); the knob is a colliding sprung slider the hand pulls, and the seatback a colliding hinged body tipped by contact.",
+  "scores": "demo: 1.0 (scripted, step 233 of 1,200); Dream-1: 0.0 (dream-1-beta, 1,200 steps)",
+  "media": "M-QJL7GH"
+}
