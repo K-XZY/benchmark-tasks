@@ -1,19 +1,19 @@
-# Raise a tilt steering wheel two notches: pull the lock lever down, lift the drooping wheel, push the lever up to lock it
+# Raise a car's tilt steering wheel 6 degrees on its stepless clamp column: free the lock lever, carry the wheel, clamp it
 
-A car's tilt steering column stands on the bench: a dashboard block with the column coming out of it at 23 degrees, a 370 mm wheel on its end, and the tilt lock lever under the column on the driver's left, as in the owner's manuals of a 2022 Kia Sonet (QY) and a Mazda CX-3. The wheel starts locked in its lowest notch. The robot does what the manuals give: pull the lock-release lever down, raise the wheel to the wanted height (here two notches up, notch 3 of 5), push the lever back up so the column locks there, and let go.
+A car's tilt steering column stands on the bench: a dashboard block with the column coming out of it at 23 degrees, a 370 mm wheel on its end, and the lock lever under the column on the driver's left, as on the 2019 to 2022 Honda Insight column. The wheel starts clamped at its lowest position. The robot does what the owner's manuals give: pull the lock lever down, raise the wheel to the wanted height (here 6 degrees up the column's arc, read on an angle gauge), push the lever back up so the column clamps there, and let go.
 
-**What this task adds.** With the lever open the column is free, and it droops under its own weight against a counterbalance spring, so one hand has to carry the wheel at the target height while the other closes the lever. In the simulator, with the lever open the column never springs up: it falls to its lowest notch. The lock only engages when the column sits on a notch, within 0.3 degrees: a lever closed between notches leaves the column free until it drifts onto the next notch, and a lever closed on the wrong notch locks it there. The lever stays where it is left, the target is one notch out of five, and the lever must be pushed closed, against its own friction, while the other hand holds the wheel there.
+**What makes it hard.** The column is stepless: a friction clamp holds it at any angle in its travel once the lever shuts, so there is no notch to drop into and the wheel is fixed wherever it sits when the lever closes. With the lever open the column is free and does not stay put: gravity and its tilt spring leave a net torque that either lowers the wheel (a droop) or raises it (a spring-up), so one hand has to carry the wheel at the target while the other closes the lever. Pushing the lever shut pushes on the column too, so the carrying hand has to hold the angle against that push. The lever stays where it is left and needs a firm push either way.
 
-**Who does it, and how often.** Every driver who shares a car resets the wheel before driving, and fleet, bus and truck drivers do it at the start of a shift: about 2.2 million US heavy and tractor-trailer truck drivers ([BLS Occupational Outlook Handbook](https://www.bls.gov/ooh/transportation-and-material-moving/heavy-and-tractor-trailer-truck-drivers.htm); many heavy-truck columns tilt by an air foot valve instead, so read it as an upper bound) and 233 million licensed US drivers ([FHWA Highway Statistics 2023](https://www.fhwa.dot.gov/policyinformation/statistics.cfm)). Kia's owner's manual ([Tilt steering wheel, 2022 Kia Sonet (QY)](https://ownersmanual.kia.com/full_webhelp/QY/2022/en_IN/topics/chapter4_9_2.html)) gives the steps: pull the lock-release lever down, set the wheel, pull the lever up to lock it, then push the wheel up and down to check it is locked. Mazda's CX-3 manual ([Steering Wheel](https://owners-manual.mazda.com/gen/en/cx-3/cx-3_8gt4ee18d/contents/04050101.html)) gives the same: pull the lever under the column down, tilt the wheel, push the lever up to lock it.
+**Who does it, and how often.** Every driver who shares a car resets the wheel before driving, and fleet, bus and truck drivers do it at the start of a shift: 240 million licensed US drivers ([FHWA Highway Statistics 2024](https://www.fhwa.dot.gov/policyinformation/statistics.cfm)) and about 2.2 million US heavy and tractor-trailer truck drivers ([BLS Occupational Outlook Handbook](https://www.bls.gov/ooh/transportation-and-material-moving/heavy-and-tractor-trailer-truck-drivers.htm); many heavy-truck columns tilt by an air valve instead, so read it as an upper bound). The steps are the usual ones for a lever-lock tilt column, as Kia's owner's manual gives them ([Tilt steering wheel, 2022 Kia Sonet](https://ownersmanual.kia.com/full_webhelp/QY/2022/en_IN/topics/chapter4_9_2.html)): pull the lock-release lever down, set the wheel, pull the lever up to lock it, then push the wheel up and down to check it is locked. The column itself, its lever and its forces are modelled on Honda's column below, a lever-lock column of the same kind.
 
-**How the demo does it.** The right hand grips the rim 15 degrees above its right-hand spoke, pointing into the wheel with its jaws across the rim. The left hand comes in from the side between the wheel and the dashboard, pinches the lever's paddle across its faces and swings it down 25 degrees about the lever's pivot, turning the grip with the paddle; the lever stays open and the hand lets go. The right hand then carries the rim up the column's arc in small steps until the column reads 6 degrees, and holds it there while the left hand grips the paddle again and swings it back up to its stop. The lock engages, both hands open and back off, and the scorer's 5 N push at the rim checks the lock.
+**How the demo does it.** The right hand grips the rim 15 degrees above its right-hand spoke, pointing into the wheel with its jaws across the rim. The left hand comes in from the side between the wheel and the dashboard, pinches the lever's handle on its top and bottom faces and swings it down 24 degrees about the lever's pivot, turning the grip with the handle; the lever stays open and the hand lets go. The right hand then carries the rim up the column's arc in small steps until the column reads 6 degrees. The left hand grips the handle again and swings it back up to its stop while the right hand keeps the column at 6 degrees, correcting the angle as the lever's push moves it. The clamp engages, both hands open and back off, and the scorer's 5 N push at the rim checks the lock.
 
 ## Real items
 
-- Kia Sonet (QY, 2022) tilt steering column, lock-release lever under the column: [Kia owner's manual, Tilt steering wheel](https://ownersmanual.kia.com/full_webhelp/QY/2022/en_IN/topics/chapter4_9_2.html).
-- Mazda CX-3 tilt column and lock-release lever: [Mazda owner's manual, Steering Wheel](https://owners-manual.mazda.com/gen/en/cx-3/cx-3_8gt4ee18d/contents/04050101.html).
-
-Both are shape references only (lever position and travel, wheel on a tilting column); neither manual gives a wheel size, spring or lever force, so those are the estimates in the Sizes table. Prices: each manual is free online (USD 0); neither car is bought. The real trial uses a used column (typically under USD 150, estimate).
+- Honda Insight (2019 to 2022) steering column, part 53200-TBA-A02 (replaces 53200-TBA-A01; also fits the 2019 Civic), about $36 used: [ahparts.com listing](https://ahparts.com/buy-used/2019-honda-insight-shaft-steering-column-assy-53200-tba-a02-53200tbaa02/432373-1). Its forces are from Honda's shop manual page for the column ([Steering Column inspection, Insight 2019 to 2022](http://downloads.laboratoryb.org/insight/gen3/Inspection/Steering%20Column.pdf)):
+  - "Using a commercially available push-pull gauge, push up the lock lever 10 mm (0.39 in) in from its end, and measure the force required to move the lock lever." "Lock lever force: Standard: 82 N (8.4 kgf, 18.4 lbf) max."
+  - "Attach a commercially available spring scale (A) to the highest point of the steering wheel ... Pull the spring scale straight up, and read the force required to move the steering column." "Tilting force (upward/downward): Standard: 69 N (7.0 kgf, 15.5 lbf) max."
+- 82 N is Honda's maximum for a column in spec, not its typical force; Honda publishes no typical figure for this column. The real YAM arm pushes about 20 N at this grip (the simulator's arm reaches 82 N in the range runs), so the simulator's default is 15 N; the act's difficulty does not rest on that force level, and the real trial sets the unit's lever to 15 to 20 N and checks that the clamp still holds, Real trial (e). The values above come from Honda's manual and the parts listing; the trial runner measures the bought unit in Real trial (e) before the first trial. The simulator's lever runs cover 15 to 82 N.
 
 ## Requirements
 
@@ -25,43 +25,81 @@ From this folder, the scripted demo (the README command):
 
 ```bash
 python demokit.py task.py OUT --mode full                                                                # the full-score reference, filmed
-python demokit.py task.py OUT --no-record --mode none,liftonly,leveronly,overshoot,leveropen,restwheel,lightlever,regrab,drop,held_fast   # failure checks, below
+python demokit.py task.py OUT --no-record --mode none,liftonly,leveronly,overshoot,leveropen,restwheel,drop   # failure checks, below
+TW_LEVER_N=82 python demokit.py task.py OUT --no-record --mode full                                     # range run: Honda's maximum lever force
+TW_NET_NM=5.9 python demokit.py task.py OUT --no-record --mode full                                     # range run: the column springs up
 ```
 
-`TRIAL_TRACE=1` prints the column angle, lever angle, lock state, hands-clear distance and score every 10 steps. The demo reads the column and lever angles from the simulator, as `demokit` allows; a policy gets the cameras only.
+`TRIAL_TRACE=1` prints the column angle, lever angle, lock state, hands-clear distance and score every 10 steps. The demo reads the column and lever angles from the simulator, as `demokit` allows; a policy gets the cameras only. The environment variables `TW_NET_NM`, `TW_LEVER_N`, `TW_PADDLE_MM`, `TW_LEVER_OPEN`, `TW_LEVER_SHUT`, `TW_DAMP` and `TW_FRIC` set the range runs below; unset, the scene is the default one.
 
-**Result** (scripted, GPU physics, 20 Hz, RTX 3090 Ti): 1.0 at step 585 (29.25 s of simulated time), against a limit of 1,200 steps.
+**Result** (scripted, GPU physics, 20 Hz, RTX 4070 Ti SUPER): 1.0 at step 587 (29.35 s of simulated time), the column clamped at 5.95 degrees, against a limit of 1,200 steps.
 
-**Dream-1** (the Dream-1 model on this task, one trial, 1,200 steps, no lost session): 0.
+**Dream-1** (the Dream-1 model on this task, one trial, 1,200 steps): 0 (the session held to the end).
+
+**Range runs** (`full`, the same demo, each at an end of the window the real trial accepts, Real trial (c) to (e)):
+
+| Setting | Column at the end | Score |
+|---|---|---|
+| default: droop, net 1.2 N m down; lever 15 N; handle 25 mm; lever frees at 10 degrees, clamps at 3; damping 4, friction 0.3 | 5.95 degrees | 1.0 (step 587) |
+| lever 82 N (Honda's maximum; simulation only, the real trial runs at 15 to 20 N) | 5.95 degrees | 1.0 (step 595) |
+| spring-up, net 5.9 N m up (as large as gravity's whole torque) | 5.97 degrees | 1.0 (step 482) |
+| droop, net 3.0 N m down | 5.97 degrees | 1.0 (step 601) |
+| handle 20 mm; lever frees at 20 degrees, clamps at 1; damping 1, friction 0 | 5.98 degrees | 1.0 (step 583) |
+| outside the window: droop 4.5 N m | clamped at 6 degrees, but the arm holding 4.5 N m cannot back the rim hand 3 cm clear | 0 |
+| lever 90 N (simulation only) | the lever stalls short of freeing the column | 0 |
+| outside the window: handle 45 mm | the pinch does not hold it; the lever is not freed | 0 |
 
 | Failure check | What it does | Score |
 |---|---|---|
 | `none` | the arms wait | 0 |
-| `liftonly` | the rim hand lifts; the lever is never touched | 0 (the column stays locked at its lowest notch) |
-| `leveronly` | the lever is pulled down and pushed back up; the wheel is not lifted | 0 (it relocks at the lowest notch) |
-| `overshoot` | as `full`, but the wheel is lifted to 9 degrees (notch 4) before the lever closes | 0.33 (raised, locked at the wrong notch) |
+| `liftonly` | the rim hand lifts; the lever is never touched | 0 (the column stays clamped at 0) |
+| `leveronly` | the lever is pulled down and pushed back up; the wheel is not lifted | 0 (the column clamps where it drooped to, off the target) |
+| `overshoot` | as `full`, but the wheel is lifted to 10 degrees before the lever closes | 0 (clamped outside 6 +/- 1) |
 | `leveropen` | the lever is pulled down, the wheel lifted to 6 degrees and let go with the lever open | 0 (the wheel droops back to its lowest stop) |
-| `drop` | the wheel is lifted to 12 degrees and let go, the rim hand clears, and the lever is shut while the wheel falls past a notch (about 9 degrees per second) | 0 (void: locked while moving with no gripper within 3 cm of the wheel; the run prints `lock ... held=False`) |
-| `held_fast` | the rim hand lifts the wheel at about 6 degrees per second and keeps hold while the lever shuts onto a notch | 0.67 (locked, a hand on the wheel; no void because the wheel is held; the run prints `lock ... held=True`) |
-| `restwheel` | as `full`, but the rim hand stays on the rim at the end | 0.67 (locked at the target, a hand on the wheel) |
-| `lightlever` | as `full`, but the lever hand sweeps the paddle with open fingers, no pinch | 0 (the 15 N lever does not move, the column stays locked) |
-| `regrab` | as `full`, but the rim hand opens, then closes on the rim again and ends holding it | 0.67 (locked at the target, a hand on the wheel) |
+| `restwheel` | as `full`, but the rim hand stays on the rim at the end | 0 (a hand on the wheel) |
+| `drop` | the wheel is lifted to 12 degrees and let go, and the lever is shut as the falling wheel passes about 7 degrees; both hands clear | 0 (void: the clamp closed at 8.8 degrees on a column that moved 2.0 degrees in the 0.5 s before) |
 
-## Sizes
+## Sizes and forces
 
-| Size | Scene | Source |
-|---|---|---|
-| Wheel diameter | 370 mm | estimate: neither manual nor Kia's Sonet spec page gives a wheel diameter; passenger-car wheels are 36 to 38 cm across; Kia lists a D-cut wheel for some Sonet trims, modelled round |
-| Rim section | 25 mm | estimate, typical |
-| Column angle | 23 degrees from horizontal | estimate from the manuals' figures |
-| Tilt pivot to wheel centre | 260 mm | estimate |
-| Tilt range | 0 to 12 degrees, five notches 3 degrees apart; target notch 3 (6 degrees) | estimate: the manuals give no figures |
-| Moving mass | 3 kg (wheel and upper column) | estimate |
-| Counterbalance spring | 3.4 N m/rad, leaving about 1.2 N m of droop at 6 degrees (gravity alone 6.2 N m) | estimate: a droop-type tilt column (Kia and Mazda manual figures) carries a counterbalance spring |
-| Lever | 70 mm arm, 45 x 45 x 10 mm paddle, 25 degrees travel, unlocks past 10 degrees, 1.0 N m friction (about 15 N at the paddle) | estimates from the manual figures; no spring scale reading of a real lever was taken, the force is an estimate; the pinch holds 40 N |
+| Number | Scene | Real value and source | Effect on difficulty |
+|---|---|---|---|
+| Lever force at the handle | 15 N (default), the real trial's adjusted setting; simulation range run at 82 N | Honda's service setting: up to 82 N at 10 mm from the lever end (Insight shop manual). The real trial adjusts the bought unit to 15 to 20 N and measures it, Real trial (e) | a stiffer lever pushes the column harder while it shuts, so the carrying hand must correct more |
+| Unlocked net torque at the target | 1.2 N m down (default); range runs 3.0 N m down and 5.9 N m up; 1 N m is about 3.1 N at the rim top | bound by calculation: with no tilt spring the net torque is gravity's alone, 3 kg x 9.81 x 0.23 m x cos 29 degrees = 5.9 N m down; a tilt spring moves it up from there. Honda's 69 N tilting force (lever loose) is the most it takes to move the column, friction included, not the net. Measured on the bought unit, Real trial (d) | the hand must carry the wheel either way |
+| Column travel | 0 to 13 degrees, stepless | estimate; the bought unit is checked to give at least 7 degrees, Real trial (c) | a shorter real travel would still contain the target |
+| Target | 6 +/- 1 degrees above the start | set by the task | |
+| Column angle | 23 degrees from horizontal | estimate, a typical car rake | none on the act |
+| Tilt pivot to wheel centre | 260 mm | estimate | |
+| Wheel | 370 mm across, 25 mm rim | estimate: passenger-car wheels are 36 to 38 cm across | |
+| Moving mass | 3 kg (wheel and upper column), centre 0.23 m from the pivot | estimate | sets the gravity part of the net torque |
+| Lever | arm 68 mm from pivot to the handle; 25 degrees of travel; frees the column past 10 degrees down, clamps within 3 degrees of its stop (range run 20 and 1) | estimate from the Insight manual's lever figure; measured on the bought unit with the angle gauge, Real trial (c) | a lever that frees later or clamps closer to its stop needs a longer swing |
+| Lever handle | 25 x 25 mm face, 10 mm thick (range run 20 mm) | estimate: the manual's push point is 10 mm in from the end, about half the handle; measured with calipers, Real trial (c) | the pinch closes across the handle's top and bottom, so it must open wider than the handle |
+| Column hinge damping and friction (lever open) | 4 N m s/rad and 0.3 N m (range run 1 and 0) | estimate; the bought unit's free fall is timed from video, Real trial (d) | lower damping lets a let-go wheel fall faster |
+| Clamp | a stiff joint lock engaged when the lever shuts | the real clamp is friction plates; the 5 N test push checks it holds | |
+| Lock test | 5 N down the arc at the rim top, less than 1 degree over 0.5 s | set by the task, as the manual's own check of pushing the wheel up and down | |
+| Void window | the column moved more than 1.5 degrees in the 0.5 s before the clamp closed (about 8 mm at the rim top, 319 mm from the pivot) | set by the task: a wheel carried by hand at the target moves far less | |
 
-**Forces in the demo.** Pinch 40 N a finger (the YAM's figure), lever push about 15 N (under the arm's push of about 20 N), rim lift about 5 N at the rim, because the counterbalance spring carries most of the 3 kg moving mass. A real trial needs no extra protection beyond pad covers on the gripper and a guard over the wheel's lowest swing for fingers.
+**Forces in the demo.** Pinch 40 N a finger (the YAM's figure). The rim lift is a few newtons at the rim (up to about 19 N in the 5.9 N m spring-up run). The lever push is the set lever force: 15 N by default, up to 82 N in the simulation range runs.
 
 ## Real trial
 
-A used tilt steering column with its wheel, from a salvage yard or an online parts seller (the Mazda CX-3 column, bought by the car's VIN from a parts seller, is the easier one to find in the US), bolted to a bench frame at 23 degrees (typically under USD 150 used; an estimate). Score it with a digital angle gauge (0.1 degree, about USD 30) on the column shroud and a 5 N spring scale at the rim. Notch 3 is the second position above the lowest (on a column with finer teeth, its gauge reading is measured at setup): read it as the angle gauge showing 6 +/- 0.3 degrees above the start reading, and in a side photo the rim top level with the yellow tape mark on the dashboard face. Choose a column whose wheel droops when the lever is open (as the Kia and Mazda manual figures show) and check the droop with the 5 N scale at the rim: the wheel must sink from 6 degrees when released with the lever open. Measure the lever's closing force at the paddle with a spring scale when the column is bought and set the 15 N estimate to it; above 20 N the real trial is not feasible. Hands-clear: no part of either gripper within 3 cm of the wheel, column or lever, judged from the end photo or video. The simulator's lattice of points 2 to 3 cm apart over each gripper is used in the simulator only. The void is judged from video: the column still moving when it locks onto a notch, with no gripper within about 3 cm of the rim, spokes or hub.
+(a) **Bench.** A used Honda Insight 2019 to 2022 steering column with its wheel (part 53200-TBA-A02, about $36 used), bolted to a bench frame by its two column brackets at 23 degrees from horizontal, the lever under the column on the robot's left, a dashboard board 0.56 to 0.70 m in front of the arm bases with a yellow tape mark at the rim-top height of the 6 degree target. Pad covers on the gripper fingers.
+
+(b) **Tools.** Two digital angle gauges, Wixey WR300 (0.1 degree resolution, about $30; [wixey.com](https://www.wixey.com/)), one on the upper column shroud and one on the lever; calipers, Mitutoyo 500-196-30 ([mitutoyo.com](https://www.mitutoyo.com/)); a force gauge, Wagner FDIX-25 (0 to 25 lbf, about 111 N; [wagnerinstruments.com](https://wagnerinstruments.com/)), used as the spring scale (pull) and as the push-pull gauge (push); a camera at 30 frames per second, Logitech C920 ([logitech.com](https://www.logitech.com/en-us/shop/p/c920-pro-hd-webcam.960-001055)), facing the column side-on, with a steel ruler, Starrett C604R-12 ([starrett.com](https://www.starrett.com/)), in view beside the rim top.
+
+(c) **Bench check, geometry.** With the lever open, raise the column from its lowest to its highest position and read the gauge: at least 7 degrees of travel. With the gauge on the lever, read the angle below its stop at which the column frees (accepted: 20 degrees or less) and the angle at which it clamps again on the way up (accepted: 1 degree or more below the stop). Measure the handle with calipers: 20 to 25 mm from its top face to its bottom face, where the gripper closes on it. A unit outside any of these is outside the task's range: choose another unit.
+
+(d) **Bench check, unlocked column.** By Honda's method: open the lever, set the column at 6 degrees, hook the spring scale at the rim top and read the force to start the column moving up (F up) and down (F down). The net force is (F up - F down) / 2 and the friction (F up + F down) / 2. Accepted net: from 9.4 N down (3.0 N m) to 18.5 N up (5.9 N m); the range runs pass at both ends. Honda's own limit, F up and F down each 69 N or less, must also hold. Then raise the wheel to the top of its travel with the lever open, let go, and time its fall to the bottom stop from the video; record it with the unit (the runs pass from damping 1 to 4 N m s/rad). A unit outside a window is outside the task's range: choose another unit and report it.
+
+(e) **Lever force, set and checked.** Honda's limit for this column is 82 N, a maximum for a column in spec, not its typical force; the real YAM arm pushes about 20 N at this grip (the simulator's arm reaches 82 N in the range runs). The act's difficulty does not rest on the force level: the 5 N hold below is what the trial judges. Set the bought column to the trial's range: work the lever three to five times, set the column mid-travel, push the lever up with the push-pull gauge 10 mm in from its end (the shop manual's method), and loosen the clamp's lock-bolt nut at the lever pivot a little at a time until the reading is 15 to 20 N. Then check that the clamp still holds at that setting: with the lever shut, pull the spring scale at the rim top down the arc to 5 N and then up the arc to 5 N; the gauge moves less than 1 degree each way, and the wheel let go holds its angle for 60 s. A column that does not hold at 15 to 20 N is not used. The simulator runs the act from 15 to 82 N (each 1.0; 90 N fails).
+
+(f) **Reset.** Pull the lever down, lower the wheel by the rim to its lowest stop, push the lever up, zero the angle gauge. About 20 s; nothing is consumed.
+
+(g) **One trial.** Start the policy with both arms at home; stop at 60 s.
+
+(h) **Scoring by hand.** 0.5: the lever is shut, the gauge reads 6 +/- 1 degrees above zero, and the end video shows no part of either gripper within 3 cm of the wheel, column or lever for at least 1 s. 1.0: then pull the 5 N spring scale reading down the arc at the rim top for 0.5 s; the gauge moves less than 1 degree.
+
+(i) **Void.** From the side video: in the 15 frames (0.5 s at 30 frames per second) before the lever's last movement, the rim top is more than 8 mm from where it was 15 frames before (read against the ruler; 1.5 degrees of column), a dropped or swung wheel clamped as it passes. Score 0.
+
+(j) **Numbers.** Every number above is the one in `task.py`: target 6 +/- 1 degrees, the lever frees past 10 degrees and clamps within 3 degrees of its stop, hands clear 3 cm, hold 1 s, test push 5 N for 0.5 s and less than 1 degree, void when the column moved more than 1.5 degrees in the 0.5 s before the clamp closed.
+
+(k) **Hands-clear in the simulator** uses a lattice of points 2 to 3 cm apart over each gripper (fingertips, pads, palm, housing) against the wheel, column and lever; the real trial judges it from video as in (h).

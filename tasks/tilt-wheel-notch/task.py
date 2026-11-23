@@ -1,4 +1,10 @@
-"""Tilt steering column: pull the lock lever down, raise the wheel two notches, close the lever so the column locks.
+"""Tilt steering column with a friction-clamp lock (stepless, as the Honda Insight gen3 column): pull the lock lever down,
+raise the wheel 6 degrees, push the lever up so the clamp locks the column there.
+
+Range runs: TW_NET_NM sets the unlocked column's net torque at the target (negative droops, positive springs up; default -1.2,
+ends -3.0 and +5.9); TW_LEVER_N sets the force at the lever handle that moves the lever either way (default 15, range end 82; the README lists the range runs).
+TW_PADDLE_MM, TW_LEVER_OPEN, TW_LEVER_SHUT, TW_DAMP and TW_FRIC set the lever handle size, the lever angles that free and clamp
+the column, and the column hinge's damping and friction (defaults and range ends at their definitions).
 
 Debug: python demokit.py task.py OUT --no-record --mode full,none
 Final: python demokit.py task.py OUT --mode full
@@ -17,7 +23,7 @@ import demokit as d  # noqa: E402
 import mechkit as m  # noqa: E402
 
 SCENE = "station"
-INSTRUCTION = "Pull the tilt lever under the steering column down, raise the wheel two notches, then push the lever back up so the column locks there, and take your hands off the wheel and lever."
+INSTRUCTION = "Pull the lock lever under the steering column down, raise the wheel 6 degrees, push the lever back up to lock it, and let go of the wheel and lever."
 SUCCESS_HOLD_S = 0.0
 SCORE_OVER = "end"
 TOP = d.TABLE_TOP
@@ -26,18 +32,24 @@ HOLD_STEPS = 20
 PUSH_STEPS = 10
 PUSH_N = 5.0
 PUSH_MOVE_DEG = 1.0
-NOTCHES = (0.0, 3.0, 6.0, 9.0, 12.0)
-TARGET = 6.0
-LOCK_TOL = 0.3
-LEVER_OPEN = -10.0
-LEVER_SHUT = -3.0
-RAISED = 1.5
-SLAM_DPS = 3.0
+TARGET = 6.0     # raise from the start angle, degrees (read on a digital angle gauge in the real trial)
+TARGET_TOL = 1.0
+LEVER_OPEN = float(os.environ.get("TW_LEVER_OPEN", "-10"))  # lever angle past which the clamp frees the column (range-run -10 and -20)
+LEVER_SHUT = float(os.environ.get("TW_LEVER_SHUT", "-3"))  # lever angle above which the clamp closes (range-run -3 and -1)
+SLAM_STEPS = 10  # void window: 0.5 s before the clamp closes
+SLAM_DEG = 1.5   # void when the column moved more than this in the window (an average over 3 deg/s): a dropped or swung wheel
 CLEAR_M = 0.03
 COL_KG = 3.0
-SPRING = 3.4  # counterbalance spring, N m/rad toward 90 deg: leaves about 1.2 N m of droop at 6 deg (gravity alone 6.2)
-SPRING_TARGET = 1.571
-LEVER_FRICTION = 1.0  # N m at the lever pivot: about 15 N at the paddle to move it either way (estimate, no spring scale available); it stays where it is left
+G_NM = COL_KG * 9.81 * 0.23 * math.cos(math.radians(23.0 + TARGET))  # gravity torque about the tilt pivot at the target, N m (5.9)
+NET_NM = float(os.environ.get("TW_NET_NM", "-1.2"))  # unlocked: net torque at the target, + lifts the wheel (spring-up), - droops
+SPRING = 3.4  # tilt spring, N m/rad
+SPRING_TARGET = math.radians(TARGET) + (G_NM + NET_NM) / SPRING  # rad: the spring's zero, set so that spring minus gravity = NET_NM at the target
+LEVER_ARM_M = 0.068  # lever pivot to the handle's grip point
+LEVER_N = float(os.environ.get("TW_LEVER_N", "15"))  # force at the lever handle to move the lever either way (Honda: 82 N max at 10 mm from the end)
+LEVER_FRICTION = LEVER_N * LEVER_ARM_M  # N m at the lever pivot; the lever stays where it is left
+PADDLE_M = float(os.environ.get("TW_PADDLE_MM", "25")) / 1000.0  # lever handle face, square (Honda figure: about 2x the 10 mm push mark; range-run 20; 45 fails)
+COL_DAMP = float(os.environ.get("TW_DAMP", "4"))   # column hinge damping, N m s/rad (range-run 1 and 4)
+COL_FRIC = float(os.environ.get("TW_FRIC", "0.3"))  # column hinge friction, N m (range-run 0 and 0.3)
 
 LOOKS = {
     "dash": m.Look(m.rgb(0.20, 0.21, 0.23), metallic=0.0, roughness=0.8),
@@ -103,10 +115,10 @@ def _shroud() -> m.Mesh:
 
 
 def _lever_mesh() -> m.Mesh:
-    # arm along the column's underside, then a paddle hanging beside it, its faces square to the station x axis
+    # arm along the column's underside, then a handle hanging beside it, its faces square to the station x axis
     arm = _tf(_bx(0.03, 0.11, -0.06, -0.045, -0.032, -0.020))
     c = _loc((0.105, -0.0775, -0.045))
-    return m.join(arm, m.box((0.010, 0.045, 0.045), tuple(c)))
+    return m.join(arm, m.box((0.010, PADDLE_M, PADDLE_M), tuple(c)))
 
 
 def _dash() -> m.Mesh:
@@ -118,7 +130,7 @@ def _lower_shroud() -> m.Mesh:
 
 
 def _tape() -> m.Mesh:
-    # yellow mark on the dash face at the rim-top height for the target notch
+    # yellow mark on the dash face at the rim-top height for the target angle
     top = _rot_y(_loc((RIM_S, 0.0, RIM_R)), TARGET, P)[0]
     return _bx(0.556, 0.560, 0.03, 0.12, top[2] - 0.003, top[2] + 0.003)
 
@@ -129,7 +141,7 @@ def _steering() -> m.Part:
                      [("shroud", _shroud(), "shroud"), ("hub", _hub(), "hub"), ("rim", _rim(), "rim")],
                      [m.col_hull("shroud_c", _shroud()), m.col_hull("hub_c", _hub())] + _rim_cols(),
                      mass=COL_KG, gravity=True, com=tuple(com), inertia=(0.05, 0.05, 0.05),
-                     damping=4.0, friction=0.3, effort=200.0, spring=SPRING)
+                     damping=COL_DAMP, friction=COL_FRIC, effort=200.0, spring=SPRING)
     lever = m.hinge("lever", "Y", tuple(_loc(C_LOCAL)), -25.0, 0.0,
                     [("lever", _lever_mesh(), "lever")], [m.col_hull("lever_c", _lever_mesh())],
                     mass=0.05, damping=0.05, friction=LEVER_FRICTION, effort=20.0, parent="column")
@@ -160,7 +172,7 @@ WHEEL_PTS = np.vstack([_surface(_rim()), _surface(_hub())])
 COL_PTS = np.vstack([WHEEL_PTS, _surface(_shroud())])
 LEV_PTS = _surface(_lever_mesh(), 0.005)
 RIM_TOP = _loc((RIM_S, 0.0, RIM_R))
-TAB = _loc((0.105, -0.085, -0.045))  # paddle grip, on the driver's left of the column (Kia, Mazda)
+TAB = _loc((0.105, -0.085, -0.045))  # lever handle grip, on the driver's left of the column (Kia, Mazda)
 
 
 def _col_world(c, col, lev, pts_col=COL_PTS, pts_lev=LEV_PTS):
@@ -175,7 +187,7 @@ class Trial:
         self.score = 0.0
         self.locked = False
         self.slam = False
-        self.th_last = None
+        self.th_hist = []
         self.tier_last = 0.0
         self.check_n = 0
         self.check_th = None
@@ -201,28 +213,21 @@ class Trial:
         c = m.state(env, "steering")
         th = c.deg("column")
         lv = c.deg("lever")
-        speed = 0.0 if self.th_last is None else abs(th - self.th_last) / DT
-        self.th_last = th
-        near = min(abs(th - n) for n in NOTCHES) <= LOCK_TOL
+        self.th_hist = (self.th_hist + [th])[-(SLAM_STEPS + 1):]
+        moved = abs(th - self.th_hist[0])
         if self.locked and lv <= LEVER_OPEN:
             m.unlock(env, "steering", "column")
             m.set_target(env, "steering", "column", SPRING_TARGET)
             self.locked = False
-        elif not self.locked and lv >= LEVER_SHUT and near:
-            if speed > SLAM_DPS and self.check_n == 0 and not self.check_failed:
-                # a dropped wheel: the column locks while moving fast with no gripper within CLEAR_M of the wheel (rim or hub)
-                hand = np.vstack([m.hand_body(env), m.fingertips(env)])
-                pts = _col_world(c, th, lv, pts_col=WHEEL_PTS, pts_lev=LEV_PTS[:0])
-                lo, hi = pts.min(0) - CLEAR_M, pts.max(0) + CLEAR_M
-                cand = hand[np.all((hand >= lo) & (hand <= hi), axis=1)]
-                held = len(cand) > 0 and float(np.linalg.norm(cand[:, None, :] - pts[None], axis=2).min()) < CLEAR_M
+        elif not self.locked and lv >= LEVER_SHUT:
+            if moved > SLAM_DEG and self.check_n == 0 and not self.check_failed:
+                # a dropped or swung wheel: the clamp closes while the column still moves fast
                 if os.environ.get("TRIAL_TRACE"):
-                    print("lock", dict(n=self.n, col=round(th, 2), speed=round(speed, 1), held=held), flush=True)
-                if not held:
-                    self.slam = True
+                    print("lock", dict(n=self.n, col=round(th, 2), moved=round(moved, 2)), flush=True)
+                self.slam = True
             m.lock(env, "steering", "column")
             self.locked = True
-        at_target = self.locked and abs(th - TARGET) <= LOCK_TOL and lv >= LEVER_SHUT
+        at_target = self.locked and abs(th - TARGET) <= TARGET_TOL and lv >= LEVER_SHUT
         gap = 0.0  # the hands-clear distance matters only at the target; skipping it elsewhere keeps the sim fast
         if at_target:
             hand = np.vstack([m.hand_body(env), m.fingertips(env)])
@@ -230,17 +235,14 @@ class Trial:
             lo, hi = pts.min(0) - CLEAR_M, pts.max(0) + CLEAR_M
             cand = hand[np.all((hand >= lo) & (hand <= hi), axis=1)]
             gap = 1.0 if len(cand) == 0 else float(np.linalg.norm(cand[:, None, :] - pts[None], axis=2).min())
-        tier = 0.0
-        if th > RAISED:
-            tier = 1 / 3
-        if at_target:
-            tier = 2 / 3
+        # 0.5: locked at the target with both hands clear; 1.0: and the lock holds the test push
+        tier = 0.5 if (at_target and gap >= CLEAR_M) else 0.0
         if tier != self.tier_last:
             self.same_n = 0
             self.tier_last = tier
         else:
             self.same_n += 1
-        if tier < 2 / 3 or gap < CLEAR_M:
+        if tier < 0.5:
             if self.check_n:
                 self._push(env, c, th, False)
             self.check_n = 0
@@ -260,9 +262,9 @@ class Trial:
         elif self.checked:
             self.score = 1.0
         else:
-            self.score = 2 / 3 if (tier >= 2 / 3 and self.same_n >= HOLD_STEPS) else (1 / 3 if tier > 0 else 0.0)
+            self.score = 0.5 if (tier >= 0.5 and self.same_n >= HOLD_STEPS) else 0.0
         self.last = dict(n=self.n, col=round(th, 2), lever=round(lv, 2), locked=self.locked, gap=round(gap, 3),
-                         speed=round(speed, 1), score=round(self.score, 3), slam=self.slam, failed=self.check_failed)
+                         moved=round(moved, 2), score=round(self.score, 3), slam=self.slam, failed=self.check_failed)
         if os.environ.get("TRIAL_TRACE") and self.n % 10 == 0:
             print("trial", self.last, flush=True)
 
@@ -284,7 +286,7 @@ def score(objects) -> float:
 
 # ---------------- demo ----------------
 GRIP_L = d.tilted(90.0, 0.0)   # rim hand (the right arm) points +x into the rim, jaws across the rim tube
-GRIP_R = d.tilted(90.0, -90.0)  # lever hand (the left arm) points -y along the paddle, jaws across its faces
+GRIP_R0 = d.tilted(90.0, -90.0)  # lever hand (the left arm) points -y along the lever handle
 RIM_AT = math.radians(15.0)   # rim grip, 15 deg above the right-hand spoke
 
 
@@ -307,17 +309,20 @@ def _roll(g, deg):
     return d._as_grip(np.array([[c, 0.0, sn], [0.0, 1.0, 0.0], [-sn, 0.0, c]]) @ g.rot)
 
 
+GRIP_R = _roll(GRIP_R0, 90.0)  # jaws across the paddle's top and bottom faces, so the lever is pushed, not dragged by friction
+PAD_W = PADDLE_M
+
+
 def _phase(name) -> None:
     print(f"phase {name}", TRIAL.last, flush=True)
 
 
-def _onto(A, target, grip, back, width, force=40.0, label="", pinch=True):
+def _onto(A, target, grip, back, width, force=40.0, label=""):
     back = np.asarray(back, float)
     yield from A.move(target + back, grip=grip, finger=d.FINGER_OPEN, t=2.5, label="near " + label)
     yield from A.move(target, grip=grip, finger=d.FINGER_OPEN, t=1.2, label="onto " + label)
     yield from A.servo(target, timeout=1.0, label="servo " + label)
-    if pinch:
-        yield from A.close(width, force, label="close " + label)
+    yield from A.close(width, force, label="close " + label)
 
 
 def _off(A, back, label=""):
@@ -345,11 +350,25 @@ def _lift(ctx, L, goal, over=4.0, step=0.25):
         a += step
         yield from L.move(_rim_grip(a), grip=_roll(GRIP_L, a), t=0.08, label="lift")
     yield from L.wait(0.5)
+    return a
 
 
-MODES = ("full", "none", "liftonly", "leveronly", "overshoot", "leveropen", "restwheel", "lightlever", "regrab", "drop", "held_fast")
-DROP_DELAY = 0.3  # s after the release before the lever hand shuts the lever
-HELD_DELAY = 0.5
+def _hold(ctx, L, goal, a, limit=120):
+    """Keep the column at `goal` with the rim hand while the other hand shuts the lever (the lever's push lifts the column)."""
+    for _ in range(limit):
+        if ctx.deg("steering", "lever") >= LEVER_SHUT + 0.5:
+            return
+        a += float(np.clip(0.5 * (goal - ctx.deg("steering", "column")), -0.3, 0.3))
+        yield from L.move(_rim_grip(a), grip=_roll(GRIP_L, a), t=0.05, label="hold")
+
+
+MODES = ("full", "none", "liftonly", "leveronly", "overshoot", "leveropen", "restwheel", "drop")
+def _fall_to(ctx, R, deg, limit=80):
+    """Wait, holding the lever hand still, until the released column has fallen below `deg`."""
+    for _ in range(limit):
+        if ctx.deg("steering", "column") < deg:
+            return
+        yield from R.wait(0.05)
 
 
 def _then(first, second):
@@ -365,22 +384,20 @@ def demo_script(ctx):
     if mode == "none":
         yield from L.wait(3.0)
         return
-    goal = 9.0 if mode == "overshoot" else TARGET
+    goal = 10.0 if mode == "overshoot" else TARGET
     LB, RB = (-0.08, 0.0, 0.0), (0.0, 0.08, 0.0)
-    if mode in ("drop", "held_fast"):
+    if mode == "drop":
         yield from _onto(L, _rim_grip(0.0), GRIP_L, LB, 0.025, label="rim")
-        yield from _onto(R, _tab_grip(0.0, 0.0), GRIP_R, RB, 0.010, label="paddle")
+        yield from _onto(R, _tab_grip(0.0, 0.0), GRIP_R, RB, PAD_W, label="paddle")
         yield from _lever_to(ctx, R, -24.0)
-        if mode == "drop":
-            # lazy: raise the wheel, let it go, and shut the lever while it falls past a notch with no hand on it
-            yield from _lift(ctx, L, 12.0)
-            th, lv = ctx.deg("steering", "column"), ctx.deg("steering", "lever")
-            yield from _lever_to(ctx, R, -4.5, over=0.0)
-            yield from ctx.together(_then(L.open(t=0.2, label="drop"), L.move(L.at() + np.asarray(LB), t=0.3, label="clear")), _then(R.wait(DROP_DELAY), _lever_to(ctx, R, -0.5)))
-        else:
-            # not a drop: the hand carries the wheel quickly through a notch while the lever shuts
-            yield from _lever_to(ctx, R, -4.5, over=0.0)
-            yield from ctx.together(_lift(ctx, L, 12.0, step=0.5), _then(R.wait(HELD_DELAY), _lever_to(ctx, R, -0.5)))
+        # lazy: raise the wheel, let it go, and shut the lever while it falls through the target with no hand on it
+        yield from _off(R, RB, "paddle")
+        yield from _lift(ctx, L, 12.0)
+        th, lv = ctx.deg("steering", "column"), ctx.deg("steering", "lever")
+        yield from _onto(R, _tab_grip(th, lv), _roll(GRIP_R, th + lv), RB, PAD_W, label="paddle again")
+        yield from _lever_to(ctx, R, -6.5, over=0.0)
+        yield from ctx.together(_off(L, LB, "rim"), _then(_fall_to(ctx, R, TARGET + 0.8), _lever_to(ctx, R, -0.5)))
+        yield from _off(R, RB, "paddle")
         _phase("end")
         yield from R.wait(2.0)
         return
@@ -388,12 +405,12 @@ def demo_script(ctx):
         yield from _onto(L, _rim_grip(0.0), GRIP_L, LB, 0.025, label="rim")
         _phase("rim held")
     if mode != "liftonly":
-        yield from _onto(R, _tab_grip(0.0, 0.0), GRIP_R, RB, 0.010, pinch=mode != "lightlever", label="paddle")
+        yield from _onto(R, _tab_grip(0.0, 0.0), GRIP_R, RB, PAD_W, label="paddle")
         yield from _lever_to(ctx, R, -24.0)
         yield from _off(R, RB, "paddle")
         _phase("lever down")
     if mode != "leveronly":
-        yield from _lift(ctx, L, goal)
+        a_rim = yield from _lift(ctx, L, goal)
         _phase("lifted")
     if mode == "leveropen":
         yield from _off(L, LB, "rim")
@@ -402,15 +419,14 @@ def demo_script(ctx):
         return
     if mode != "liftonly":
         th, lv = ctx.deg("steering", "column"), ctx.deg("steering", "lever")
-        yield from _onto(R, _tab_grip(th, lv), _roll(GRIP_R, th + lv), RB, 0.010, label="paddle again")
-        yield from _lever_to(ctx, R, -0.5)
+        yield from _onto(R, _tab_grip(th, lv), _roll(GRIP_R, th + lv), RB, PAD_W, label="paddle again")
+        if mode == "leveronly":
+            yield from _lever_to(ctx, R, -0.5)
+        else:
+            yield from ctx.together(_lever_to(ctx, R, -0.5), _hold(ctx, L, goal, a_rim))
         _phase("lever up")
         yield from _off(R, RB, "paddle")
-    if mode == "regrab":
-        yield from L.open(label="open rim")
-        yield from L.wait(1.0)
-        yield from L.close(0.025, 40.0, label="close rim again")
-    elif mode not in ("restwheel", "leveronly"):
+    if mode not in ("restwheel", "leveronly"):
         yield from _off(L, LB, "rim")
     yield from R.wait(3.0)
     _phase("end")
