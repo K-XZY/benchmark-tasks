@@ -25,6 +25,8 @@ python demokit.py task.py OUT --mode full                              # full sc
 python demokit.py task.py OUT --no-record --mode nolock                # the lazy routes, each in its own run
 python demokit.py task.py OUT --no-record --mode squeeze
 python demokit.py task.py OUT --no-record --mode hold
+python demokit.py task.py OUT --no-record --mode skew                 # level, right end commanded 56 mm forward (4.0 deg in depth; measured 60 mm, 4.3 deg)
+python demokit.py task.py OUT --no-record --mode tilt                 # ends commanded 31 mm high and 31 mm low (4.5 deg; measured 5.1 deg off level)
 ROD_HOLD_N=80 ROD_CAM_NM=0.2 ROD_CAP_N_PER_MM=40 ROD_INNER_MM=14.3 ROD_MU=0.5 \
   python demokit.py task.py OUT --no-record --mode full                # one corner of the estimates' real-trial ranges
 ```
@@ -66,7 +68,7 @@ Measured at the end with a tape, a ruler and an inclinometer on the rod. Score 0
 
 - 0.33: the rod is off the shelf with both cap faces on the side walls.
 - 0.67: also the cam is locked: the inner tube turned to the cam's lock angle (80 degrees in the sim; on the real rod, measure it beforehand with a protractor, 60 to 120 degrees, or check that the rod holds its length when pulled by hand).
-- 1.0: also, with the rod level within 3 degrees and its middle 12 cm (plus or minus 1.5 cm) above the shelf, both whole grippers (fingertips, pads, palm and housing) more than 3 cm from the rod for 5 s, then a 10 N push down at mid-span for 2 s sags it less than 5 mm, and it stays on both walls.
+- 1.0: also, with the rod level within 3 degrees (its axis's angle to the horizontal; the ends may sit at different depths) and its middle 12 cm (plus or minus 1.5 cm) above the shelf, both whole grippers (fingertips, pads, palm and housing) more than 3 cm from the rod for 5 s, then a 10 N push down at mid-span for 2 s sags it less than 5 mm, and it stays on both walls.
 
 An unlocked rod held level between the walls has its caps pushing its tubes shorter: it drops when let go. A rod locked short drops; a rod locked level with no overshoot does not wedge and sags under the push.
 
@@ -76,7 +78,7 @@ Scripted demo, RTX 3090 Ti:
 
 | Run | Score | Rod at the end |
 |---|---|---|
-| `full`, sim values | 1.0 | success at step 1015 (50.75 s); caps squeezed 0.84 and 0.85 mm, level 0.7 deg, 116 mm above the shelf, sag under the 10 N push 0.0 mm, grippers 56 mm clear |
+| `full`, sim values | 1.0 | success at step 1016 (50.8 s); caps squeezed 0.84 and 0.86 mm, level 0.5 deg, 115 mm above the shelf, sag under the 10 N push 0.0 mm, grippers 58 mm clear |
 | `full`, hold 80 N, torque 0.2 N m, caps 40 N/mm, inner 14.3 mm, lock 120 deg | 1.0 | caps 0.95 and 0.97 mm, sag 0.0 mm |
 | `full`, 200 N, 0.1 N m, 20 N/mm, 12.7 mm, 60 deg | 1.0 | caps 0.80 and 0.81 mm, sag 0.0 mm |
 | `full`, 80 N, 0.1 N m, 20 N/mm, 14.3 mm, 120 deg | 1.0 | caps 0.91 and 0.92 mm, sag 0.0 mm |
@@ -87,6 +89,8 @@ Scripted demo, RTX 3090 Ti:
 | `nolock`: pushed out and levelled without the twist | 0.0 | the caps push the tubes shorter; the rod drops to the shelf |
 | `squeeze`: held level between the walls, unlocked, let go | 0.0 | drops to the shelf |
 | `hold`: the full demo, but the right hand never lets go | 0.67 | locked and level, gripper touching the rod |
+| `skew`: the full demo, set level with the right end commanded 56 mm nearer the front (4.0 deg in depth), measured 60 mm and 4.3 deg | 1.0 | level 0.3 deg, 111 mm above the shelf, sag 0.0 mm: a skew in depth keeps full credit |
+| `tilt`: the full demo, set with the left end commanded 31 mm high and the right 31 mm low (4.5 deg), measured 5.1 deg off level | 0.67 | 5.1 deg off level, middle 111 mm above the shelf: loses full credit |
 
 **Dream-1 run** (the harness's own policy, 2,400 steps, one trial, one session, RTX 3090 Ti): 0. The policy did not lay the rod between the walls in the 120 s run (no tier reached). The film is `model_run.mp4` (top camera).
 
@@ -115,7 +119,7 @@ Bench setup, from the bought items in Real items. All positions are in mm from t
 - Void (0): the rod rests on the shelf or on the cans, or a cap face is off its wall. Look from above and the front; slide a 3 mm feeler between each cap face and its wall: if it enters, the cap is off. Also void: a cap face past the wall's front or back edge (the wall is 37 cm deep) or above its top (32 cm above the shelf), checked by eye and a tape against marks on the wall. A photo from the front and one from above records the end state.
 - 0.33: the rod is off the shelf with both caps on the walls. Check by passing a ruler under the rod.
 - 0.67: also the cam is locked. Read the turn of the inner tube on the tape flag with a protractor; it counts as locked at the cam's lock angle, measured beforehand (60 to 120 degrees on the real rod). Alternatively pull the tubes by hand: a locked rod keeps its length.
-- 1.0: also level and at height, hands clear, and the push held. Put a digital inclinometer on the tube: within 3 degrees. Measure the rod's middle above the shelf with a tape: 120 +/- 15 mm. Check by eye and with a ruler that no part of either gripper (fingertips, pads, palm, housing) is within 30 mm of the rod, held for 5 s with a stopwatch. Then push down at mid-span with a push-pull gauge (a 0 to 50 N spring push-pull gauge, about $15, resolving 1 N) to 10 N, held 2 s, with a ruler or dial indicator under the rod's middle: sag under 5 mm, and the rod still on both walls.
+- 1.0: also level and at height, hands clear, and the push held. Put a digital inclinometer (or a spirit level with an angle scale) on the tube, along it: within 3 degrees of horizontal. Only the vertical angle counts; a rod whose ends sit at different depths from the shelf's front is still level. Measure the rod's middle above the shelf with a tape: 120 +/- 15 mm. Check by eye and with a ruler that no part of either gripper (fingertips, pads, palm, housing) is within 30 mm of the rod, held for 5 s with a stopwatch. Then push down at mid-span with a push-pull gauge (a 0 to 50 N spring push-pull gauge, about $15, resolving 1 N) to 10 N, held 2 s, with a ruler or dial indicator under the rod's middle: sag under 5 mm, and the rod still on both walls.
 
 **Forces and fits that make the act hard, and bench checks.** Each is a measured value in the Sizes table, with its accepted range:
 - End-cap squeeze: the caps compress about 1 mm each when the rod is carried level (the demo's 0.85 mm at 25 N/mm is about 21 N a cap). Check a cap's stiffness by pressing it on a kitchen scale and reading the compression with calipers over the first 2 mm: accepted 20 to 40 N/mm. Check that the cap holds the rod: with the rod squeezed 1 mm each end, the 10 N push must not drop it.

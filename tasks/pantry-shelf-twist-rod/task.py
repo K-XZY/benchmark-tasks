@@ -13,6 +13,7 @@ Estimated values have a real-trial range (README); each can be set by environmen
 
     python demokit.py task.py OUT --mode full                                   the full-score reference, filmed
     python demokit.py task.py OUT --no-record --mode nolock,squeeze,hold        lazy routes: 0, 0, 0.67
+    python demokit.py task.py OUT --no-record --mode skew,tilt                  level rule: level but skewed in depth (commanded 4.0 deg, measured 4.3) 1.0; commanded 4.5 deg off level (measured 5.1) 0.67
 """
 
 from __future__ import annotations
@@ -195,7 +196,7 @@ class Trial:
         tl, tr = tips_local(s)
         wl, wr = s.to_world(np.vstack([tl, tr]))
         axis = (wl - wr) / max(np.linalg.norm(wl - wr), 1e-9)
-        level_deg = math.degrees(math.acos(min(1.0, abs(axis[1]))))  # off the straight line across, in any direction
+        level_deg = math.degrees(math.asin(min(1.0, abs(axis[2]))))  # the axis's angle to the horizontal: vertical inclination only, a skew in depth is not counted
         mid = (wl + wr) / 2
         gap = seg_dist(gripper_points(env), wl, wr) - R_CAP
         on_walls = on_wall(wl) and on_wall(wr)
@@ -322,15 +323,19 @@ def demo_script(ctx):
                 yield from r.close(2 * R_IN, force=40.0, t=0.4, label="grip again")
                 yield from lift_level()
     # the swing: both hands carry the rod level, each grip to its place on the level line, the caps squeezing into the walls
-    left_level = np.array([LINE_X, WALL_Y + PRESS - (Y_LTIP0 - Y_GL), z + R_OUT - 0.0014])
-    right_level = np.array([LINE_X, -WALL_Y - PRESS + (Y_GR - Y_RTIP0), z + R_IN - 0.0014])
+    # range checks of the level rule: "skew" sets the right end commanded 56 mm nearer the front (4.0 deg in depth; measured 60 mm, 4.3 deg; still level: keeps 1.0);
+    # "tilt" sets the left end 31 mm above the line and the right 31 mm below (commanded 4.5 deg off level; measured 5.1 deg; middle at height: loses 1.0)
+    dx = -0.056 if ctx.mode == "skew" else 0.0
+    dz = 0.063 if ctx.mode == "tilt" else 0.0
+    left_level = np.array([LINE_X, WALL_Y + PRESS - (Y_LTIP0 - Y_GL), z + R_OUT - 0.0014 + dz / 2])
+    right_level = np.array([LINE_X + dx, -WALL_Y - PRESS + (Y_GR - Y_RTIP0), z + R_IN - 0.0014 - dz / 2])
     yield from ctx.together(l.move(left_level, grip=d.down(-90), t=2.5, label="swing level"), r.move(right_level - reach * r.approach_axis() - np.array([0.0, 0.0, reach]), t=2.5, label="swing level"))
     yield from ctx.together(l.wait(0.5), r.wait(0.5))
     for _ in range(4):  # level it by eye: both ends to the bar's height, the right end in line with the left across
         s = rod()
         wl, wr = s.to_world(np.vstack(tips_local(s)))
-        el = np.array([0.0, 0.0, S + LINE_H - wl[2]])
-        er = np.array([wl[0] - wr[0], 0.0, S + LINE_H - wr[2]])
+        el = np.array([0.0, 0.0, S + LINE_H + dz / 2 - wl[2]])
+        er = np.array([wl[0] + dx - wr[0], 0.0, S + LINE_H - dz / 2 - wr[2]])
         if max(np.linalg.norm(el), np.linalg.norm(er)) < 0.004:
             break
         yield from ctx.together(l.move(l.at() + 0.6 * el, t=0.8, label="level"), r.move(r.at() + 0.6 * er, t=0.8, label="level"))
@@ -340,7 +345,7 @@ def demo_script(ctx):
     for _ in range(4):  # the left end rests on its wall now: the right hand brings its end in line with it
         s = rod()
         wl, wr = s.to_world(np.vstack(tips_local(s)))
-        er = np.array([wl[0] - wr[0], 0.0, wl[2] - wr[2]])
+        er = np.array([wl[0] + dx - wr[0], 0.0, wl[2] - dz - wr[2]])
         if np.linalg.norm(er) < 0.004:
             break
         yield from r.move(r.at() + 0.8 * er, t=0.8, label="level")
