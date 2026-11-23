@@ -308,31 +308,6 @@ class Arm:
               f" ({'Isaac Lab DifferentialIKController' if ctl.ctrl is not None else 'NumPy DLS'})", flush=True)
         return {"why": why, "travel": travel, "force_est": f_est, "lead": lead}
 
-    def plan_to(self, pos, grip=None, finger: float | None = None, back: float = 0.0, ignore=(), other_arm: bool = True, speed: float = SPEED, label: str = "plan"):
-        """Like `move`, but on a path that cuRobo plans round everything in the scene and the other arm (`curobo_plan.py`; the 5090 only, README "cuRobo").
-        `grip` may be a list of grips: cuRobo takes one it can reach clear of everything, and the arm keeps it (`self.grip`). `back`: stop this far
-        short of `pos` along the grip's approach axis, for a straight last move in. `ignore`: parts to leave out, such as the one about to be held.
-        Returns whether it found a path; with none, the arm stays where it is.
-        Plan to a pose beside the part, then go the last few centimetres with `move` or `servo`: the planner keeps the whole hand clear of everything."""
-        import curobo_plan
-
-        grips = list(grip) if isinstance(grip, (list, tuple)) else [self.grip if grip is None else grip]
-        f = self.finger if finger is None else finger
-        goals = np.array([np.asarray(pos, dtype=float) + self.trim - back * g.rot[:, 2] for g in grips])
-        res = curobo_plan.plan(self.ctx, self.side, self.q, goals, [g.rot for g in grips], finger=-max(abs(f), abs(self.finger)), ignore=ignore, other_arm=other_arm, speed=speed)
-        if not res.ok:
-            print(f"[demokit] {self.side} '{label}': cuRobo found no path ({res.why})", flush=True)
-            return False
-        grip, goal = grips[res.grip], goals[res.grip]
-        f0, n = self.finger, len(res.path)
-        for k, q in enumerate(res.path, 1):
-            self.q = np.asarray(q, dtype=float)
-            self.cmd = np.r_[self.q, float(np.clip((f0 + (f - f0) * k / n) / FINGER_OPEN, 0.0, 1.0))]
-            yield
-        self.finger, self.grip = f, grip
-        p, rot = ik.tcp_pose(self.q, self.base)
-        self._note(float(np.linalg.norm(p - goal)) * 1000, float(np.degrees(np.linalg.norm(ik._rot_error(grip.rot, rot)))), label)
-        return True
 
 
 # -- a demo's context ------------------------------------------------------------------------

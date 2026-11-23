@@ -276,13 +276,14 @@ def _visual(parts) -> str:
     }}""" if parts else ""
 
 
+CONTACT_OFFSET = 0.001  # every collider's contact offset, m: 1 mm keeps the fine pocket and plate hulls from making contact pairs they do not need
 _COL_HEAD = f"""(
         prepend apiSchemas = ["PhysicsCollisionAPI", "PhysxCollisionAPI", "MaterialBindingAPI"]
     )
     {{
         rel material:binding:physics = </{_ROOT}/PhysicsMaterial>
         token visibility = "invisible"
-        float physxCollision:contactOffset = 0.004
+        float physxCollision:contactOffset = {CONTACT_OFFSET}
         float physxCollision:restOffset = 0"""
 
 
@@ -634,7 +635,7 @@ def _arena_object(spec: Part):
 
         return Jointed(name=spec.name, object_type=ObjectType.ARTICULATION, usd_path=usd, initial_pose=pose)
     material = sim_utils.RigidBodyMaterialCfg(static_friction=spec.friction[0], dynamic_friction=spec.friction[1])
-    collision: dict[str, Any] = {"contact_offset": 0.005, "rest_offset": 0.0}
+    collision: dict[str, Any] = {"contact_offset": CONTACT_OFFSET, "rest_offset": 0.0}
     if spec.torsional_patch:
         collision.update(torsional_patch_radius=spec.torsional_patch, min_torsional_patch_radius=0.8 * spec.torsional_patch)
     addon = {"physics_material": material, "collision_props": sim_utils.CollisionPropertiesCfg(**collision),
