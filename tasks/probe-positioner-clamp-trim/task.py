@@ -45,8 +45,8 @@ REACH = 0.144  # base centre to needle tip, stages centred (estimate)
 ARM_Z, BEND_X = 0.040, 0.080  # the arm's height above the platen, and where the needle leaves it (frame, x)
 TIP_Z_REL = TIPZ - PZ
 BASE_M, NEEDLE_M = 0.6, 0.05  # kg (estimates)
-MU = 0.3  # base on platen (estimate)
-MAGNET_N = 40.0  # downward pull of the magnet at ON (estimate)
+MU = float(os.environ.get("PP_MU", "0.3"))  # base on platen (estimate; nickel on mild steel 0.178 to 0.64, Engineering Toolbox)
+MAGNET_N = float(os.environ.get("PP_MAGNET_N", "343.0"))  # downward pull of the magnet at ON: first4magnets 19206 rated 70 kg (686 N) pull-off on thick steel, taken at half for the 12.7 mm bar
 MM_PER_TURN = 0.3  # tip travel per knob turn
 TRAVEL = 0.0065  # each stage: 13 mm in all
 KSIGN_X = float(os.environ.get("PP_KSX", "1"))  # + knob degrees advance the tip along +x (X stage), and along +y (Y stage)
@@ -54,6 +54,7 @@ KSIGN_Y = float(os.environ.get("PP_KSY", "1"))
 LEVER_ON_DEG = 62.0  # the lever swings 70 degrees to its stop (estimate); past 62 it is ON
 LEVER_PIVOT = (-0.012, BASE[1] / 2 + 0.004, 0.045)  # frame coordinates, on the +y face
 LEVER_LEN = 0.030
+LEVER_N = float(os.environ.get("PP_LEVER_N", "3.0"))  # push at the lever knob, N (estimate; MIL-STD-1472H finger band 2.8 to 11 N)
 TAB = (0.008, 0.020, 0.016)
 STUB = 0.014  # the knob stands this far out of the arm (so 18 mm of closed fingers clear the face)
 KNOB_R, KNOB_H, KNOB_Z = 0.008, 0.012, 0.060
@@ -201,7 +202,7 @@ def _station() -> m.Part:
     parts.append(("cam_mount", m.cylinder(0.014, 0.008, (0, 0, z0 + 0.054)), "alu"))
     parts.append(("cam_head", _box((0.032, 0.032, 0.035), (0, 0, z0 + 0.0795)), "scope2"))
     parts.append(("cam_lens_ring", m.cylinder(0.008, 0.004, (0.0, -0.018, z0 + 0.0795), axis="y"), "lens"))
-    return m.fixed("station", (SX, 0.0, TOP), parts, cols, LOOKS, friction=(0.3, 0.3))
+    return m.fixed("station", (SX, 0.0, TOP), parts, cols, LOOKS, friction=(MU, MU))
 
 
 # -- a positioner, as visuals: an MP40-class unit (65 x 40 mm base plate, three stacked slide blocks, two micrometer heads, a magnet lever, a probe arm and a tungsten needle) -------------------------------
@@ -313,7 +314,7 @@ def _p2() -> m.Part:
     bar, end = _lever_meshes(90.0)
     tab = _box(TAB, tuple(end))  # the knob: a flat tab 8 mm thick along the push, 20 mm across, 16 mm along the arm
     lv = m.Link("lever", "hinge", "Y", tuple(pv), -5.0, 72.0, (("bar", bar, "lever"), ("tab", tab, "lever")), (m.col_hull("lever_bar_c", bar), m.col_box("lever_tab_c", TAB, tuple(end))), mass=0.02, spring=3.0,
-                damping=0.02, friction=0.0, effort=0.09)
+                damping=0.02, friction=0.0, effort=LEVER_N * LEVER_LEN)
     # the X knob on the rear face (-x), the Y knob on the -y face: a ribbed 16 mm thimble on a silver barrel, with a pointer stripe on its end
     kx_at = np.array([-BASE[0] / 2, 0.0, KNOB_Z])
     ky_at = np.array([0.0, -BASE[1] / 2, KNOB_Z])
@@ -426,8 +427,8 @@ class Trial:
         p1 = m.state(env, "pos1")
         self.n += 1
         q_l = float(st.joint("lever"))  # radians, positive toward ON
-        # the lever's friction: a drive that trails the joint, holding at most 0.09 N m (README 15)
-        slack = 0.09 / 3.0
+        # the lever's friction: a drive (spring 3.0 N m/rad) that trails the joint by a slack, so it holds LEVER_N at the knob (3 N: 0.09 N m)
+        slack = LEVER_N * LEVER_LEN / 3.0
         if q_l - self.tgt > slack:
             self.tgt = q_l - slack
         elif self.tgt - q_l > slack:
@@ -572,7 +573,7 @@ def demo_script(ctx):
         yield from R.close(BASE[0], float(os.environ.get("PP_GRIP", "40")), label="right grips the base")
         off = R.tcp()[:2] - ctx.pos("pos2")[:2]
         yield from R.move(np.r_[np.array([SX - REACH, 0.0]) + off, hold_z + hold_off[2]], t=3.0, label="slide the base to the die")
-        tgt_tip = MARK + np.array([{"no_trim": -0.0015}.get(mode, -0.0003), 0.0])
+        tgt_tip = MARK + np.array([{"no_trim": -0.0015}.get(mode, -0.0003), -0.0003])  # a hair short of the mark on both axes: the trim then ends on forward turns
         herr = 0.0
         for k in range(10):  # half steps on the tip's own reading (the microscope view), each let settle: a base on friction lags the hand, then creeps on
             s = ctx.state("pos2")
@@ -600,7 +601,7 @@ def demo_script(ctx):
         print(f"[pp] {label} pressing: tip {np.round(_tip(ctx)[:2] * 1000, 2)} mm, moved {np.linalg.norm(_tip(ctx)[:2] - t0) * 1000:.2f} mm", flush=True)
 
     if press:
-        yield from press_on(R, hold_grip, (0.0, -0.010), "right")
+        yield from press_on(R, hold_grip, (float(os.environ.get("PP_PAX", "0.0")), float(os.environ.get("PP_PAY", "-0.010"))), "right")
 
     # 3. the left hand throws the lever, from behind, and stops the moment it reads ON
     pivot = ctx.pos("pos2") + np.array(LEVER_PIVOT)
@@ -648,7 +649,7 @@ def demo_script(ctx):
     yield from _trim(ctx, L, "x", kx_pos, mode)
     if True:
         if press:
-            yield from press_on(L, d.tilted(45.0, 0.0), (-0.008, 0.012), "left")
+            yield from press_on(L, d.tilted(float(os.environ.get("PP_LPT", "45")), 0.0), (float(os.environ.get("PP_LPX", "-0.008")), 0.012), "left")
             yield from R.move(R.at() + np.array([0.0, -0.05, 0.08]), t=0.8, label="right lifts off the top")
         rp, rr = d.ik.tcp_pose(np.array(d.READY, dtype=float), R.base)  # via the ready pose: a solve seeded from the top press takes the wrong branch to the Y knob
         yield from R.move(rp, grip=d._as_grip(rr), finger=d.FINGER_OPEN, t=1.4, label="right through its ready pose")
@@ -675,18 +676,25 @@ def _trim(ctx, arm, which, knob_pos, mode):
     if which == "x":
         grip, axis, ksign, appr = d.level(0.0, KFLIP["x"]), (1.0, 0.0, 0.0), KSIGN_X, np.array([-0.07, 0.0, 0.0])
     else:
-        grip, axis, ksign, appr = d.level(90.0, KFLIP["y"]), (0.0, 1.0, 0.0), KSIGN_Y, np.array([0.0, -0.07, 0.0])
+        flip = KFLIP["y"] if os.environ.get("PP_YFLIP", "") != "auto" else bool((MARK[1] - _tip(ctx)[1]) * KSIGN_Y > 0)
+        grip, axis, ksign, appr = d.level(90.0, flip), (0.0, 1.0, 0.0), KSIGN_Y, np.array([0.0, -0.07, 0.0])
     tgt = MARK[ax]
     yield from arm.move(knob_pos() + appr, grip=grip, finger=d.FINGER_OPEN, label=f"{which} knob: over")
     yield from arm.move(knob_pos(), t=1.0, label=f"{which} knob: in")
-    for it in range(14):
+    first = 0.0
+    for it in range(int(os.environ.get("PP_KIT", "24"))):
         e = tgt - _tip(ctx)[ax]
         if abs(e) < 0.0001:
             break
-        deg = float(np.clip(e / (MM_PER_TURN * MM) * 360.0, -KDEG, KDEG))
+        if first and e * first < 0 and abs(e) < 0.00025:  # overshot but inside the 0.3 mm tier: a turn back drags the base, so stop
+            break
+        first = first or e
+        deg = float(np.clip(KGAIN * e / (MM_PER_TURN * MM) * 360.0, -KDEG, KDEG))
         if abs(deg) < 20.0:
             deg = math.copysign(20.0, deg)
         pre = -0.5 * deg * ksign * KTURN[which] * PREROLL  # wind the open wrist back half a turn first, so the turn runs either side of its rest (the wrist's roll limit)
+        if which == "y" and deg * ksign > 0:  # a +Y turn starts from rest: wound back first, the open fingers lose the knob
+            pre = 0.0
         if pre:
             yield from arm.turn(pre, axis=axis, t=max(0.4, abs(pre) / 120.0), label=f"{which} knob: wind back")
         yield from arm.close(KNOB_R * 2, 20.0, t=0.3, label=f"{which} knob: grip")
@@ -703,5 +711,6 @@ KTURN = {"x": float(os.environ.get("PP_KTX", "1")), "y": float(os.environ.get("P
 KFLIP = {"x": False, "y": False}
 HOLD = os.environ.get("PP_HOLD", "press")
 KDEG = float(os.environ.get("PP_KDEG", "150"))
+KGAIN = float(os.environ.get("PP_KGAIN", "1.0"))
 SLIDE_GAIN = float(os.environ.get("PP_SG", "0.5"))
 PREROLL = float(os.environ.get("PP_PRE", "1"))
