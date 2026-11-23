@@ -1,0 +1,22 @@
+{
+  "title": "Swap a PopGrip top on a phone lying loose: twist the old top off, lock the new one on, then pull it open",
+  "category": "Societal relatability",
+  "keywords": [
+    "PopSockets",
+    "PopGrip",
+    "phone grip",
+    "quarter-turn lock",
+    "press and twist",
+    "iPhone",
+    "bimanual",
+    "hold and turn"
+  ],
+  "instruction": "Hold the phone, press and twist the old PopGrip top off into the tray, then press and twist the new top on until it locks, and pull it open.",
+  "context": "About one in nine US adults (11%, YouGov, November 2023, 1,104 adults) keep a PopSockets-style grip on their phone, and the maker reports over 275 million grips sold in 75 countries. On the swappable PopGrip the top twist-locks into a base stuck to the phone back; owners twist it off to change its look or to charge the phone on a wireless pad. The maker's steps: close the grip flat, press down and twist 90 degrees to remove; to fit, seat the new top, press and twist until it clicks. Done carelessly, a half-turned top falls off in a pocket and is lost, or a hard twist peels the adhesive base off the phone. The hard part is physical: the 38.8 mm top stands only 7.7 mm proud of the phone when collapsed, and a 171 g phone lying on a desk resists a twist by friction alone (about 0.02 N·m, 0.09 under the press), at or below the 0.03 to 0.3 N·m the pressed lock takes, so one hand holds the phone while the other presses and turns.",
+  "setup": "Metres; x forward, y to the robot's left, z up from the table top; arm bases at (0, +/-0.305). An Apple iPhone 15 (147.6 x 71.6 x 7.8 mm, 171 g) lies face down, its centre at (0.38, -0.05), long side along y, camera plateau at its +y end. It moves on the desk as a loose phone: it slides against 0.5 N and turns against 0.02 N m (table friction, mu 0.3 on 171 g). A PopSockets PopGrip base (36 mm across, 2 mm) is stuck on its back, centred 40 mm from its -y end; on it sits the old top (38.8 mm disc, 7.7 mm proud of the phone's back collapsed, 24.3 mm expanded, 12 g), locked. A trinket dish (90 x 130 mm inside, 2 mm floor, 6 mm walls) is centred at (0.30, -0.22); the new top lies in it at (0.30, -0.19), collapsed, face up.",
+  "scoring": "Read at the end of the run. 0: the phone shoved more than 30 mm or turned more than 30 degrees (real trial: grid under the phone). 0.33: the old top off the base and in the dish (photo). 0.67: and the new top seated and turned to within 10 degrees of its lock (index marks, protractor; a 2 N tug, a cup of 204 g of water hung from the disc, leaves it on). 1.0: and pulled up at least 15 of its 16.6 mm, still locked, both whole grippers at least 1 cm from it, held 3 s (side camera, ruler).",
+  "run_limit": "1,200 steps (60 s at 20 Hz)",
+  "fidelity": "Rigid bodies at setup's sizes. The phone slides and turns on the desk but does not lift or tip. Each top is free until it rests on the base, coaxial within 1.5 mm, at a slot. The quarter-turn lock is code: the seated top turns only while pressed 6 N down (estimate, README) (0.08 N m), holds 3 N m unpressed, and its lugs hold it down against 60 N once turned 10 degrees off the slot. The accordion is a slide with 1 N friction. Estimates and their bounds: README.",
+  "scores": "Demo: 1.0 (both arms). Dream-1 run: 0.0. Lock torque 0.03 and 0.3 N m, press 2.8 and 11 N: 1.0. One hand only: 0 (the idle hand lets the phone slide over 30 mm, even at lock 0.03 N·m). Pulled up unturned: 0. Turned unpressed: 0. New top set and let go unturned: 0.33.",
+  "media": "M-K4G35N"
+}
