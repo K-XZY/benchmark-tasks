@@ -1,0 +1,23 @@
+{
+  "title": "Turn a hedge trimmer's rear handle to its 90 degree detent: pull an 8 mm sprung lever, battery out, 3.4 kg body held",
+  "category": "Impact on jobs",
+  "keywords": [
+    "hedge trimmer",
+    "rotating rear handle",
+    "sprung release lever",
+    "detent",
+    "battery slide-out",
+    "counter-hold",
+    "two hands, different jobs",
+    "landscaping"
+  ],
+  "instruction": "Take the battery out of the hedge trimmer and set it down, then turn the rear handle until it locks at 90 degrees, and let go.",
+  "context": "Impact on jobs: turning a hedge trimmer's rear handle to its 90 degree stop readies it to cut a hedge's side. Landscaping and groundskeeping workers hold 952,640 US jobs (0.95 million) (SOC 37-3011, BLS Occupational Employment and Wage Statistics, May 2024), and O*NET lists as a Core task of the occupation (37-3011.00, importance 84): \"Use hand tools, such as shovels, rakes, pruning saws, saws, hedge or brush trimmers, or axes.\" The Greenworks Pro 60V HT60L00 manual has the operator take the battery out, pull the rotation lever and begin turning the rear handle, then let the lever go and turn on until it clicks in at 90 degrees. It is hard because the 1.24 kg pack must be drawn out level along its rails and set down, the lever is a 15 mm paddle with 8 mm of sprung travel, and the 3.4 kg trimmer must not slide or lift while one hand turns the handle and the other holds the front hoop.",
+  "setup": "Station table; positions in mm in the station frame (x forward from the arm bases, y to the robot's left), heights above the table top. One Greenworks Pro 60V 26-inch cordless hedge trimmer, model HT60L00, lies flat, base down, as the manual's Figure 4 shows, blade (cover on) pointing to the robot's right, rear handle at centre and locked; the rear handle's axis is at x 220, y 260, 50 mm up. One Greenworks 60V 2.0 Ah battery pack, model LB60A00, sits latched in the battery port across the housing, its end and the release button under it on the side facing the robot; the pack slides out toward the robot along two rails. Both arms at their ready pose.",
+  "scoring": "Real trial: protractor, ruler, side phone camera at table height with mm ruler in view (30 mm set-down, 10 mm rail lift). 0.25: battery pack off its rails, upright (tilt under 20 deg), centre under 90 mm high, set down not dropped (lowest corner under 30 mm when released, never falling over 0.77 m/s). 0.5: rear handle at least 15 deg off centre (turns only with the lever pulled 6 mm or more). 0.75: handle locked at 90 deg either side, lever at rest. 1.0: also both grippers (fingers, palm, housing) at least 20 mm clear of trimmer and pack for 3 s. 0 (void): pack dropped, handle turned over 3 deg with the pack on its rails, pack lifted over 10 mm while over the rails, or trimmer slid over 100 mm, lifted over 15 mm or tilted over 6 deg. Tiers cumulative.",
+  "run_limit": "1400 steps (70 s at 20 Hz); the scripted demo reaches 1.0 at step 1151 (57.55 s) on an RTX 4070 Ti SUPER.",
+  "reset_notes": "Slide the battery pack back in along its rails until it latches, turn the rear handle back to centre (pull the lever, turn, let go until it clicks), and lay the trimmer at the marked spot with the blade cover on.",
+  "fidelity": "PhysX rigid bodies, real size and mass: trimmer 3.4 kg, LB60A00 pack 1.24 kg on 8 mm rails, 1 mm play a side (0.2-1.5). Handle locks within 2 degrees of -90, 0, 90 with lever back. Latch: 150 N hold-down until the button is in 5 mm. Estimates, scored across bounds: lever 10 N (5-11), button 6 N (3-11), turn 0.5 N m (0.3-0.6), eject 4 N (window 4-14), eject stroke 15 mm (12-20, no maker figure), rail friction 0.275 (0.25-0.4, rail pair; pack 0.5 on fingers, table). Box housing and pack.",
+  "scores": "Demo: 1.0 (step 1151, 57.55 s); Dream-1: 0.0 (1400 steps, 70 s, RTX 3090 Ti)",
+  "media": "M-DBWKGX"
+}
