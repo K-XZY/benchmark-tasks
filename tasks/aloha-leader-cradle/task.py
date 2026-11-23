@@ -36,8 +36,11 @@ from yam_arena.task_file import TABLE_TOP  # noqa: E402
 SCENE = "station"
 INSTRUCTION = 'One of this robot arm\'s servos has failed and stopped its servo bus, so the arm cannot be driven to a rest pose; its power will be cut for the repair and it will go limp. Hold it up so it does not drop: close both grippers on it, and one second later the power is cut. With both grippers still on it, lay it down in its cradle pose (shoulder lift 0.45, elbow flex 0.8, wrist flex -0.35 rad, the other joints 0) without dropping it, then let go.'
 SUCCESS_HOLD_S = 0.0
+# HOLD_STEPS: the success state must stay true for 40 scorer steps = 2 s at the 20 Hz scorer rate, so a pose that only passes through the cradle
+# window for an instant, or a hand that lets go and lets the arm sag back, does not score; SUCCESS_HOLD_S stays 0.0 because the count is kept here.
 HOLD_STEPS = 40  # the final state counted by the scorer: 2 s at 20 Hz
 V_DROP = 0.5  # m/s: any point of the arm faster than this after the cut is a drop
+F_HOLD = float(os.environ.get("F_HOLD", "1.0"))  # N: each finger of a gripper must push on the arm at least this hard for that gripper to count as holding it
 V_HIT = float(os.environ.get("V_HIT", "0.25"))  # m/s: a link striking the bench, pad or cradle faster than this is a hard landing
 TOP = TABLE_TOP[SCENE]
 HERE = pathlib.Path(__file__).parent
@@ -175,7 +178,7 @@ def _with_start_state(part):
             txt = txt[:j] + f"float state:angular:physics:position = {deg:.6f}\n        float state:angular:physics:velocity = 0\n        " + txt[j:]
         if SELF_CONTACT:
             txt = _self_contact(txt)
-        return txt
+        return txt.replace('"PhysicsMassAPI"', '"PhysicsMassAPI", "PhysxContactReportAPI"')  # contact reports on every link, so the scorer reads the fingers' push on the arm
 
     return dataclasses.replace(part, build=build)
 
@@ -355,7 +358,27 @@ class Trial:
         self.score = 0.0
         self.now: dict = {}
         self.held_at_cut = False
+        self.view = None
+        self.fhist = []
+        self.land_t = None  # seconds from the cut until a link first reaches the foam or bench (the unheld fall time)
         self.set_by_hands = False  # the arm within 10 degrees of the cradle pose at the last step both grippers held it
+
+    def _finger_forces(self, env) -> np.ndarray:
+        """The contact force (N) of each of the four YAM fingers on the arm's links (all five links summed as vectors), this physics step."""
+        base = env.unwrapped
+        if self.view is None:
+            asset = base.scene["koch"]
+            names, paths = list(asset.body_names), list(asset.root_view.link_paths[0])
+            links = [paths[names.index(n)] for n in NAMES]
+            tips = []
+            for side in ("left", "right"):
+                robot = base.scene[f"{side}_robot"]
+                rp = dict(zip(list(robot.body_names), list(robot.root_view.link_paths[0])))
+                tips += [rp["tip_left"], rp["tip_right"]]
+            self.view = base.sim.physics_sim_view.create_rigid_contact_view(links, filter_patterns=[tips] * len(links), max_contact_data_count=256 * len(links))
+        mat = self.view.get_contact_force_matrix(dt=float(base.sim.get_physics_dt()))
+        mat = np.asarray(mat.numpy() if hasattr(mat, "numpy") else mat.detach().cpu().numpy(), float).reshape(len(NAMES), 4, 3)
+        return np.linalg.norm(mat.sum(axis=0), axis=1)
 
     def _power(self, env, on: bool) -> None:
         """Power on: the joint holds its working-pose angle (stiff, damped). Power off: no stiffness, only the joint's own damping."""
@@ -377,16 +400,11 @@ class Trial:
         q = q_now(st)
         tips = m.fingertips(env)
         pts = arm_surface(q)
-        # held: each hand has both fingers on the arm (a point of each within 1.5 cm of the arm's surface: the pads touch it) and its jaws closed to under 6 cm
-        held, grip = [], []
-        for side, rows in (("left", slice(0, 12)), ("right", slice(12, 24))):
-            tt = tips[rows]
-            f1, f2 = tt[:6], tt[6:]
-            d1 = float(np.min(np.linalg.norm(f1[:, None] - pts[None], axis=2)))
-            d2 = float(np.min(np.linalg.norm(f2[:, None] - pts[None], axis=2)))
-            gap = float(np.linalg.norm(f1.mean(axis=0) - f2.mean(axis=0)))
-            held.append(d1 < 0.015 and d2 < 0.015 and gap < 0.06)
-            grip.append((round(100 * d1, 1), round(100 * d2, 1), round(100 * gap, 1)))
+        # held: each gripper has both its fingers pressing on the arm's links (contact force at least F_HOLD each), read from PhysX contact reports
+        self.fhist = (self.fhist + [self._finger_forces(env)])[-3:]
+        fn = np.median(np.array(self.fhist), axis=0)  # (left tip_left, left tip_right, right tip_left, right tip_right), N: the median of the last 3 steps, so one solver step's flicker neither makes nor breaks a hold
+        held = [bool(fn[0] >= F_HOLD and fn[1] >= F_HOLD), bool(fn[2] >= F_HOLD and fn[3] >= F_HOLD)]
+        grip = [tuple(round(float(v), 1) for v in fn[:2]), tuple(round(float(v), 1) for v in fn[2:])]
         both = all(held)
         if not self.cut and not self.moved and float(np.abs(q - Q_WORK).max()) > 0.02:
             self.moved = True
@@ -397,7 +415,7 @@ class Trial:
             if self.held_steps >= 20 or self.t > int(os.environ.get("K_AUTOCUT", "600")):  # 1 s after both grippers close; 30 s if they never do
                 self.cut = True
                 self.cut_t = self.t
-                self.held_at_cut = both
+                self.held_at_cut = both and float(np.abs(q - Q_WORK).max()) < 0.1  # caught only if the arm is still within 0.1 rad (5.7 degrees) of its working pose when the power goes (a powered arm forced to the cradle first does not count)
                 self._power(env, False)
                 print(f"[koch] torque cut at t {self.t * DT:.1f} s; held by both: {both}; q {np.round(q, 2)}", flush=True)
         # the arm's speed, from its joint readings: every surface point's speed through the URDF's kinematics (a fall moves the links, not a roll joint's few degrees)
@@ -415,6 +433,9 @@ class Trial:
                 self.peak1 = max(self.peak1, spd)
             # drop latch: any point of the arm faster than V_DROP, or striking the bench, pad or cradle faster than V_HIT
             hit = gap < 0.006
+            if self.land_t is None and hit.any() and k > 1:
+                self.land_t = k * DT
+                print(f"[koch] first landing {self.land_t:.2f} s after the cut at {float(vel[hit].max()):.2f} m/s; q {np.round(q, 2)}; held {held}", flush=True)
             v_hit = float(vel[hit].max()) if hit.any() else 0.0
             if spd > V_DROP and not self.latch:
                 self.latch, self.why = True, f"a link at {spd:.2f} m/s"
@@ -447,7 +468,7 @@ class Trial:
         if self.latch:
             sc = 0.0
         self.score = 1.0 if (self.full and not self.latch) else sc
-        self.now = {"q": np.round(q, 2), "err_deg": np.round(err, 0), "v": round(spd, 3), "peak": round(self.peak, 2), "held": held, "grip_cm": grip, "cut": self.cut, "latch": self.why,
+        self.now = {"q": np.round(q, 2), "err_deg": np.round(err, 0), "v": round(spd, 3), "peak": round(self.peak, 2), "held": held, "grip_N": grip, "cut": self.cut, "latch": self.why,
                     "peak1": round(self.peak1, 2), "rest": resting, "gap_mm": round(1000 * float(gap.min()), 1), "dmin_cm": round(100 * dmin, 1), "near": near, "clear_steps": self.clear_steps, "set": self.set_by_hands, "base_gap_mm": round(1000 * self.base_gap, 1)}
 
 
@@ -530,6 +551,8 @@ def demo_script(ctx):
     read = lambda: q_now(m.state(env, "koch"))  # the arm's own joint readings
     q = Q_WORK.copy()
     pl, pr = pinch_points(q)
+    if mode == "offpad":  # a lazy route: the right hand closes on the forearm's middle instead of the wrist's grip spot
+        pr = pr + 0.35 * (pl - pr)
     gl, gr = hand_grip(q, "shoulder_lift"), hand_grip(q, "wrist_flex")
     yield from ctx.together(l.move(pl - 0.10 * gl.rot[:, 2], grip=gl, finger=FINGER_OPEN, t=2.5, label="left beside the upper arm"),
                             r.move(pr - 0.10 * gr.rot[:, 2], grip=gr, finger=FINGER_OPEN, t=2.5, label="right beside the wrist"))
@@ -543,7 +566,7 @@ def demo_script(ctx):
     tipoff("beside")
     yield from ctx.together(l.move(pl, t=1.5, label="left onto the upper arm"), r.move(pr, t=1.5, label="right onto the wrist"))
     tipoff("onto")
-    yield from ctx.together(l.close(float(os.environ.get("CLOSE_L", "0.005")), 30.0, t=0.8, label="left closes on the upper arm"), r.close(float(os.environ.get("CLOSE_R", "0.012")), 30.0, t=0.8, label="right closes on the wrist"))
+    yield from ctx.together(l.close(float(os.environ.get("CLOSE_L", "0.028")), float(os.environ.get("CLOSE_F", "25")), t=0.8, label="left closes on the upper arm"), r.close(float(os.environ.get("CLOSE_R", "0.022")), float(os.environ.get("CLOSE_F", "25")), t=0.8, label="right closes on the wrist"))
     for _ in range(100):  # until the power is cut (1 s after both grippers hold)
         yield
         if TRIAL.cut:
@@ -556,6 +579,14 @@ def demo_script(ctx):
         for _ in range(200):
             yield
         _report(ctx, "gate end: ")
+        return
+    if mode == "push":  # a lazy route: both hands let go at the cut, then the right pushes the arm down with a closed jaw
+        yield from ctx.together(l.open(t=0.3), r.open(t=0.3))
+        yield from r.close(0.0, 5.0, t=0.5, label="right closes")
+        yield from r.move(r.at() + np.array([0.0, 0.0, -0.05]), t=1.5, label="right pushes down")
+        for _ in range(200):
+            yield
+        _report(ctx, "push end: ")
         return
     if mode == "onehand":  # a lazy route: the left hand lets go at the cut, and the right lays the arm alone by its wrist
         yield from l.open(t=0.3)
