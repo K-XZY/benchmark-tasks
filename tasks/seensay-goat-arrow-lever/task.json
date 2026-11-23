@@ -1,0 +1,21 @@
+{
+  "title": "Turn a See 'n Say's free arrow onto the goat's 36-degree sector, then pull its sprung lever without moving the 420 g toy",
+  "category": "Societal relatability",
+  "keywords": [
+    "toy",
+    "See 'n Say",
+    "pointer dial",
+    "sprung lever",
+    "bimanual",
+    "holding a toy steady"
+  ],
+  "instruction": "Make the See 'n Say play the goat: turn the arrow to the goat and pull the lever.",
+  "context": "About 18.9 million US children are aged 1 to 5 (US Census national population estimates, July 2024), and 54% of parents of 1-5 year olds say their child does object play such as puzzles or blocks on a typical day at home (2025 national parent poll, n=710). Pull-lever talking toys are a staple of that play: a child or the carer beside them turns the centre arrow to a picture, then pulls the side lever, and the toy names the animal and plays its sound. The usual way is to hold the toy with one hand and pull with the other. What goes wrong is the pull: a 3 to 8 N tug on a 420 g toy drags it across the table or turns it off its marks, and a sloppy grip knocks the arrow into the next picture. It is physically hard because each picture spans only 36 degrees, so the arrow must stop within about 15 degrees of the goat; the lever must pass 90% of its 75-degree sprung stroke; and the pull outweighs the toy's 1.65 N sliding friction, so the other hand pins it.",
+  "setup": "Station table (wood); cm from the midpoint between the arm bases, x forward, y left; heights above the table. Two YAM arms, bases at y +30.5 and -30.5. A Fisher-Price See 'n Say The Farmer Says (Mattel CBN98; barn-shaped body 22.9 long, 20.3 wide, 5.1 thick, 420 g) lies face up centred at (30, 0), roof away from the robot, on tape marks. Its face has ten 36-degree picture sectors (clockwise from the roof: goose, turkey, mouse, goat, music, quiz, chick, owl, bunny, cat) round a dial centred 1.5 cm toward the robot from the toy's centre; a yellow arrow, 6 cm from the centre to its tip and 1 cm tall, turns freely about the dial's centre with light detents and starts on the cat. A yellow lever with a round smiley head (3.4 cm across) hangs on a pivot beside the toy's right edge, 6 cm toward the roof from its centre; its head stands 8 cm from the pivot, past the roof's right corner, and swings 75 degrees toward the robot against a return spring, then springs home.",
+  "scoring": "Read every step from the toy. 0.33: the arrow within 15 degrees of the goat's sector centre. 0.67: the lever has passed its trigger (67.5 of its 75 degrees) at a moment when the arrow was on the goat and the toy face up within 3 cm and 10 degrees of its marks (the toy plays the goat), and the arrow still on the goat. 1.0: as 0.67, and the lever back within 5 degrees of home, the arrow still on the goat, the toy on its marks and every point of both grippers (fingers, palm and housing) at least 5 cm from the toy, all held 2 s. Score 0 for the rest of the run if the toy tips more than 25 degrees from face up or leaves the table.",
+  "run_limit": "1,200 steps (1 minute at 20 Hz)",
+  "reset_notes": "Lay the toy face up on its tape marks, roof away from the robot, and turn the arrow back to the cat. The lever springs home by itself.",
+  "fidelity": "Approximate. Sound is not simulated: the toy counts as playing the goat when the lever passes 90 % of its stroke with the arrow on the goat. Estimates, each bounded and checked across its range: lever stroke 75 degrees (60 to 90), spring 4.4 N at the head at the trigger (3 to 8 N), toy-table friction 0.4 (0.3 to 0.5), arrow detents as joint friction 0.02 N m (0.01 to 0.04). Body collider is its barn outline.",
+  "scores": "demo: 1.0 (success at step 426, 21.3 s); half pull 0.33; pull without holding 0.33 (0.67 at the 3 N corner); arrow on the cat 0.0; arrow past the goat 0.0; Dream-1: 0.0",
+  "media": "M-874PFK"
+}
