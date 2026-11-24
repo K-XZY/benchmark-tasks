@@ -58,7 +58,7 @@ LEVER_LEN = 0.080  # pivot to the paddle's centre
 STROKE = float(os.environ.get("SS_STROKE", "75.0"))  # estimate, bound 60 to 90 (README: protractor on the real toy)
 TRIGGER = 0.9 * STROKE  # 67.5: the toy plays once the lever passes this
 HOME_DEG = 5.0  # back home within this
-LEVER_N = float(os.environ.get("SS_LEVER_N", "4.4"))  # N at the head at the trigger: estimate, bound 3 to 8 (README: luggage scale on the real toy)
+LEVER_N = float(os.environ.get("SS_LEVER_N", "4.4"))  # N at the head at the trigger: estimate, bound 4 to 8 (README: read on a Pesola 10 N spring scale)
 LEVER_K = LEVER_N * 0.080 / math.radians(TRIGGER)  # N m/rad about the pivot, 80 mm to the head: 0.30 at 4.4 N, 75 degrees
 TOY_MU = float(os.environ.get("SS_MU", "0.4"))  # toy on the table, static and dynamic: estimate, bound 0.3 to 0.5 (README: spring-scale drag test)
 DETENT_NM = float(os.environ.get("SS_DETENT", "0.02"))  # the arrow's detents as joint friction: estimate, bound 0.01 to 0.04 N m
@@ -69,32 +69,28 @@ HOLD_STEPS = 40  # 2 s at 20 Hz
 
 LOOKS = {"barn": m.Look(m.rgb(0.80, 0.10, 0.08), roughness=0.5), "face": m.Look(m.rgb(0.96, 0.95, 0.90), roughness=0.5),
          "roof": m.Look(m.rgb(0.95, 0.75, 0.10), roughness=0.5), "arrow": m.Look(m.rgb(0.98, 0.80, 0.05), roughness=0.4),
-         "lever": m.Look(m.rgb(0.98, 0.80, 0.05), roughness=0.4), "rim": m.Look(m.rgb(0.10, 0.35, 0.75), roughness=0.5),
-         "s0": m.Look(m.rgb(0.55, 0.80, 0.35), roughness=0.6), "s1": m.Look(m.rgb(0.95, 0.60, 0.25), roughness=0.6),
-         "goat": m.Look(m.rgb(0.70, 0.62, 0.50), roughness=0.6), "ink": m.Look(m.rgb(0.1, 0.1, 0.1), roughness=0.6)}
+         "lever": m.Look(m.rgb(0.98, 0.80, 0.05), roughness=0.4),
+         "dial": m.Look(roughness=0.6, texture=str(pathlib.Path(__file__).resolve().parent / "dial.png"))}
+DIAL_IMG_R = 0.084  # m: the dial picture's half width (dial.png spans the rim)
 
 
-def _wedge(a0: float, a1: float, r0: float, r1: float, z0: float, z1: float, n: int = 6) -> m.Mesh:
-    """A ring sector on the dial, convex enough for a prism (n points along the outer edge)."""
-    angs = np.radians(np.linspace(a0, a1, n))
-    pts = [(DIAL_C[0] + r0 * math.cos(math.radians(a0)), DIAL_C[1] + r0 * math.sin(math.radians(a0)))]
-    pts += [(DIAL_C[0] + r1 * math.cos(a), DIAL_C[1] + r1 * math.sin(a)) for a in angs]
-    pts += [(DIAL_C[0] + r0 * math.cos(math.radians(a1)), DIAL_C[1] + r0 * math.sin(math.radians(a1)))]
-    return m.prism(pts, z0, z1)
+def _dial_face() -> m.Mesh:
+    """The dial's picture face: a flat disc carrying dial.png, the ten picture tiles in the toy's order (image up is the roof)."""
+    n = 72
+    ang = np.radians(np.arange(n) * 360.0 / n)
+    ring = np.stack([DIAL_C[0] + DIAL_IMG_R * np.cos(ang), DIAL_C[1] + DIAL_IMG_R * np.sin(ang), np.full(n, T + 0.0012)], 1)
+    v = np.vstack([[DIAL_C[0], DIAL_C[1], T + 0.0012], ring])
+    uv = np.stack([0.5 - (v[:, 1] - DIAL_C[1]) / (2 * DIAL_IMG_R), 0.5 + (v[:, 0] - DIAL_C[0]) / (2 * DIAL_IMG_R)], 1)
+    f = np.array([[0, 1 + k, 1 + (k + 1) % n] for k in range(n)])
+    return m.Mesh(v, f, uv)
 
 
 def _toy() -> m.Part:
     outline = [(-L / 2, -W / 2), (EAVE_X, -W / 2), (L / 2, 0.0), (EAVE_X, W / 2), (-L / 2, W / 2)]
     body = m.prism(outline, 0.0, T)
     roof = m.prism([(EAVE_X - 0.004, -W / 2 + 0.006), (L / 2 - 0.008, 0.0), (EAVE_X - 0.004, W / 2 - 0.006)], T, T + 0.0015)
-    parts = [("body", body, "barn"), ("roof", roof, "roof"), ("rim", m.cylinder(DIAL_R + 0.004, 0.0008, (DIAL_C[0], DIAL_C[1], T + 0.0004)), "rim")]
-    for i, name in enumerate(ANIMALS):
-        c = sector_centre(name)
-        look = "goat" if name == "goat" else ("s0" if i % 2 else "s1")
-        parts.append((f"sec_{name}", _wedge(c - 17.0, c + 17.0, HUB_R + 0.010, DIAL_R, T + 0.0008, T + 0.0018), look))
-        # a dark picture mark in each sector, so that a camera reads which sector is which
-        px, py = DIAL_C[0] + 0.058 * math.cos(math.radians(c)), DIAL_C[1] + 0.058 * math.sin(math.radians(c))
-        parts.append((f"pic_{name}", m.cylinder(0.009 if name == "goat" else 0.006, 0.0006, (px, py, T + 0.0021)), "ink"))
+    parts = [("body", body, "barn"), ("roof", roof, "roof"), ("rim", m.cylinder(DIAL_R + 0.008, 0.0008, (DIAL_C[0], DIAL_C[1], T + 0.0004)), "roof")]
+    parts.append(("dial", _dial_face(), "dial"))  # the ten picture tiles (dial.png: Twemoji icons, CC BY 4.0)
     parts.append(("boss", m.cylinder(0.009, T * 0.7, (PIVOT[0], PIVOT[1] + 0.004, T / 2)), "lever"))
     cols = [m.col_hull("body_c", body)]
     inertia = (MASS * (W * W + T * T) / 12, MASS * (L * L + T * T) / 12, MASS * (L * L + W * W) / 12)

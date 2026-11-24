@@ -45,14 +45,15 @@ _ROOT = "__ROOT__"  # stands for the prim's root in the text below, until a part
 class Mesh:
     v: np.ndarray  # [n, 3]
     f: np.ndarray  # [m, 3], counter-clockwise from outside
+    uv: np.ndarray | None = None  # [n, 2] texture coordinates per vertex, for a Look with a texture
 
     def moved(self, t) -> "Mesh":
-        return Mesh(self.v + np.asarray(t, float), self.f)
+        return Mesh(self.v + np.asarray(t, float), self.f, self.uv)
 
     def turned(self, deg: float, axis: str = "z") -> "Mesh":
         c, s = np.cos(np.radians(deg)), np.sin(np.radians(deg))
         r = {"x": [[1, 0, 0], [0, c, -s], [0, s, c]], "y": [[c, 0, s], [0, 1, 0], [-s, 0, c]], "z": [[c, -s, 0], [s, c, 0], [0, 0, 1]]}[axis]
-        return Mesh(self.v @ np.array(r).T, self.f)
+        return Mesh(self.v @ np.array(r).T, self.f, self.uv)
 
     def aimed(self, outward: str) -> "Mesh":
         """Turn a mesh built along +z, so that +z points along `outward`: "+X", "-Y", ... ."""
@@ -197,6 +198,7 @@ class Look:
     opacity: float = 1.0
     emissive: tuple[float, float, float] | None = None
     glass: tuple[float, float, float] | None = None
+    texture: str | None = None  # an image file mapped by the mesh's uv (sRGB colour)
 
 
 def _material(name: str, look: Look) -> str:
@@ -219,6 +221,36 @@ def _material(name: str, look: Look) -> str:
                 float inputs:frosting_roughness = 0
                 bool inputs:thin_walled = 1
                 token outputs:out
+            }}
+        }}"""
+    if look.texture is not None:
+        return f"""
+        def Material "{name}"
+        {{
+            token outputs:surface.connect = <{base}/surface.outputs:surface>
+            def Shader "surface"
+            {{
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor.connect = <{base}/tex.outputs:rgb>
+                float inputs:metallic = {look.metallic}
+                float inputs:roughness = {look.roughness}
+                token outputs:surface
+            }}
+            def Shader "tex"
+            {{
+                uniform token info:id = "UsdUVTexture"
+                asset inputs:file = @{look.texture}@
+                token inputs:sourceColorSpace = "sRGB"
+                float2 inputs:st.connect = <{base}/st.outputs:result>
+                token inputs:wrapS = "clamp"
+                token inputs:wrapT = "clamp"
+                float3 outputs:rgb
+            }}
+            def Shader "st"
+            {{
+                uniform token info:id = "UsdPrimvarReader_float2"
+                string inputs:varname = "st"
+                float2 outputs:result
             }}
         }}"""
     c = look.color
@@ -250,6 +282,10 @@ def _fmt(a: np.ndarray, digits: int = 5) -> str:
 def _mesh(name: str, mesh: Mesh, look: str, hidden: bool = False) -> str:
     v, f = mesh.v, mesh.f
     vis = '\n            token visibility = "invisible"' if hidden else ""
+    st = "" if mesh.uv is None else f"""
+            texCoord2f[] primvars:st = [{_fmt(mesh.uv)}] (
+                interpolation = "vertex"
+            )"""
     return f"""
         def Mesh "{name}" (
             prepend apiSchemas = ["MaterialBindingAPI"]
@@ -263,7 +299,7 @@ def _mesh(name: str, mesh: Mesh, look: str, hidden: bool = False) -> str:
             normal3f[] normals = [{_fmt(_corner_normals(v, f).reshape(-1, 3), 4)}] (
                 interpolation = "faceVarying"
             )
-            uniform token subdivisionScheme = "none"
+            uniform token subdivisionScheme = "none"{st}
         }}"""
 
 
