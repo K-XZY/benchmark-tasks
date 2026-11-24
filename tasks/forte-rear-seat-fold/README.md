@@ -1,77 +1,106 @@
 # Fold a sedan's rear seatback from the trunk: one hand holds the spring-return knob, the other tips 9 kg past upright
 
-The 40% rear seatback of a 2019-2021 Kia Forte sedan stands on the bench as it sits in the car, seen from the trunk: hinged at its foot, reclined 25 degrees toward the robot, held by a striker latch at its top outer corner, with the seatback lock knob on the trunk-side trim beside its top. The robot does what Kia's owner's manual gives: with the headrests already lowered, "pull out the seatback locking knob in the trunk, then fold the seat toward the front of the vehicle." One hand pulls the knob out 20 mm and holds it; the other pushes the seatback top forward until it passes upright, and gravity lays it on the cushion.
+**What is built.** The trunk at full scale, from fixed colliders (positions in setup; Sizes and Trunk below): a floor 1.20 m long, two side walls 60 cm tall and 1.35 m apart, a wheel arch on each, a 12 cm sill, two opening flanges 12 to 60 cm up, a parcel shelf 3 cm thick, wall to wall, its underside 60 cm up, and the 60% seatback, upright beside the 40% one. The shelf collides whole and is drawn as its two edges; the real trial uses an opaque board. The arms work from inside the trunk; their bases stand on its floor, 65 cm in from the sill; in a scan by geometry of bases on the trunk floor, 55 cm in is the nearest to the sill from which one hand holds the knob while the other pushes 33 cm up the seatback (SCANS.md, Base place). No hand passes the opening or the sill; they and the flanges touch nothing in the act. Of 55, 60 and 65 cm, 65 is the base place with the whole PULL tab inside the overhead image.
 
-**What makes it hard.** The knob springs back. Let go before the seatback has swung 5 degrees off its striker and the latch catches it again, so the hold has to last into the push, and the push comes from the far side of the trunk opening, at the top of a 0.6 m seatback. The seatback weighs about 9 kg with its centre about 0.3 m from the hinge: reclined 25 degrees, that is about 11 N m about the hinge, about 19 N pushed square to the seatback at its top, falling to zero at upright. Pushing on the closed latch moves nothing.
+Tables, methods and scans are in [SCANS.md](SCANS.md).
 
-**Who does it, and how often.** Folding a rear seat to load something long through the trunk is a first-hand act for most drivers: the US had 240 million licensed drivers in 2024 ([FHWA, Nation's Highways 2026](https://www.fhwa.dot.gov/policyinformation/pubs/our_nations_highways_2026/drivers.cfm): "The Nation reached 240 million licensed drivers in 2024"), and the Forte sedan alone sold 115,929 cars in the US in 2021 ([Kia America full-year 2021 sales by model](https://www.best-selling-cars.com/usa/2021-full-year-usa-kia-america-sales-by-model)), with its 60/40 folding rear seat. How often a driver folds the seat is not surveyed.
+**The act.** The 40% rear seatback of a 2019-2021 Kia Forte sedan reclines 25 degrees toward the robot, held by a striker latch at its top outer corner. Its lock knob is on the trim beside its top, 97 cm in from the sill. One hand pulls the knob 20 mm and holds it, the other pushes the seatback past upright, and gravity folds it. Kia's manual, after lowering the headrests (done here at the start): "Pull out the seatback locking knob(1) in the trunk, then fold the seat toward the front of the vehicle" ([2024][m24]; [2019][m19], PDF page 33). The manual gives the pull and the fold; the hold, the knob's return, the re-catch, the recline, the push from the trunk and the forces are this task's model, not the manual's.
 
-**How the demo does it.** The left hand passes under the trim block to in front of the knob, comes in level along +x, closes its jaws across the front of the knob's flat pull tab (12 mm thick, 25 mm tall) and draws it 20 mm out to its stop. The right hand, closed, sets its fingertips on the seatback's trunk face 52 cm up from the hinge (8 cm below its top) and walks them forward along the seatback's arc, never more than 3 degrees ahead of the measured angle. Once the seatback reads 8 degrees, the left hand lets go of the knob and backs off; the right hand carries on, sliding down to 45 cm up as the seatback nears upright, and backs off at 40 degrees. Gravity carries the seatback down onto the cushion.
+**Latch model.** In this task's latch model, the knob springs back, and let go before the seatback leaves its striker, the latch catches again, so one hand holds it while the other pushes. The latch is free while the knob is pulled 15 mm or more; if the knob returns with the seatback under 5 degrees, the latch catches again and brings the seatback back at 2 degrees a second.
 
-## Real items
+**What makes it hard.** The hold lasts into the push, until 5 degrees off the striker. The knob is reached across the trunk floor, under the shelf and over the arch; the push is on the same side, 60 cm out. 9 kg centred 0.30 m up at 25 degrees takes about 34 N square to the seatback 33 cm up, falling to zero at upright. The push is 34 N static (51.7 N peak in the demo); the bench check tests the arm's push before a run counts.
 
-- Kia genuine rear seatback, Back Assembly-Rr Seat 89300M7330B4U, 2019-2021 Kia Forte sedan (BD): [kiapartsnow listing](https://www.kiapartsnow.com/genuine/kia-back-assy-rr-seat~89300m7330b4u.html). New, it is a dealer part priced on that listing; the real trial uses a used one with its latch, knob and cable, typically $50 to $150 from a salvage yard (estimate).
-- Use steps: [Kia Forte 2024 owner's manual, folding the rear seat](https://ownersmanual.kia.com/full_webhelp/BDm/2024/en_US/topics/t00043.html). Knob location: [Kia Forte Features & Functions Guide, p. 28](https://manualslib.com/manual/2484180/Kia-Forte.html?page=28) ("Pull Seatback Lock Release Lever", "Lever located in trunk"); the owner's manual names the same part "the seatback locking knob(1) in the trunk", and its figure shows it at the top corner of the trunk opening beside the seatback top: a flat tab marked PULL on a short rod, pulled straight back toward the trunk opening, which the sim models. Both free online ($0).
-
-## Requirements
-
-`yam-isaac-lab-arena` with Isaac Lab-Arena 0.3.1 (`source <ARENA_DIR>/yam.env`). `mechkit.py`, `demokit.py` and `taskspace.py` are in this folder. Importing `mechkit` hooks `yam_arena.scene` and `yam_arena.inspect_embodiment` without changing them on disk.
-
-## Run a trial
-
-From this folder, the scripted demo (the README command):
-
-```bash
-python demokit.py task.py OUT --mode full                                                     # the full-score reference, filmed
-python demokit.py task.py OUT --no-record --mode none,pushonly,pullonly,letgo,shove            # failure checks, below
-```
-
-Scores land in `OUT/<mode>/result.json` (`task_score`).
-
-| Mode | What the robot does | Score (GPU) |
-|---|---|---|
-| full | pull and hold the knob, push the seatback past upright, let go | 1.0 at step 233 (11.65 s) |
-| none | nothing | 0 |
-| pushonly | push the seatback top for 40 s without touching the knob | 0 (the latch holds) |
-| pullonly | pull and hold the knob, no push | 0 (the seatback stays reclined) |
-| letgo | one hand at a time: pull the knob, let go, then push | 0 (the latch has caught again) |
-| shove | no knob; the push hand driven 8 cm into the latched seatback top | 0 |
-| Dream-1 (dream-1-beta) | the model drives both arms from the three camera views for the full 1,200 steps | 0.0 |
+**Who does it.** A sedan's driver, for a load too long for the trunk: "to allow you to carry longer objects than could not otherwise be accommodated" ([Kia][m42], "if equipped"). Hyundai's [2010 Elantra manual](https://www.manualsdir.com/manuals/772779/hyundai-2010-elantra.html?page=27) has a "seatback locking knob in the trunk" too.
 
 ## Scoring
 
-Judged on the state at the end, from the seatback's hinge angle (0 at the latched pose). Off the striker: swung 5 degrees or more, which needs the latch released (0.33). Past upright: swung more than the 25-degree recline, so the seatback is beyond vertical (0.67). Folded: within 10 degrees of the folded stop on the cushion, 113 degrees (1.0). Nothing is remembered from earlier in the run: a seatback lifted back up loses its tier.
+The seatback's hinge angle (0 latched) at the end; stop when folded and at rest for 1.0 s, or at 60 s (the run ends at the first step with the full score). Off the striker: 5 degrees or more, which needs the latch released (1/3). Past upright: more than the 25-degree recline (2/3). Folded: every one of the last 20 steps (1.0 s) within 10 degrees of the folded stop, the angle moving 1.0 degree or less in all (1.0). The stop is the recline plus 88, 113 at 25 (folded line 103). The score is the tier met at the end of the run.
+
+**Both hands.** The score reads the hinge angle. In the full run's last second the right gripper is 276 mm from the seatback, the left 443. By geometry, at 100 to 108 degrees, in every pose found the gripper point nearest the seatback is at its foot, 0 to 14 cm up. Of 1,223 poses with a gripper point within 10 mm of it at 103 to 112 degrees, 242 were run in the simulator (288 runs): 0 held it; in the other 981 a force calculation finds no hold (SCANS.md, Both hands).
+
+## Results
+
+From this folder, in `yam-isaac-lab-arena` with Isaac Lab-Arena 0.3.1 (`source <ARENA_DIR>/yam.env`). Scores: `OUT/<mode>/result.json`.
+
+```bash
+python demokit.py task.py OUT --mode full
+python demokit.py task.py OUT --no-record --mode none,pushonly,pullonly,letgo,shove
+```
+
+| Mode | What the robot does | Score (GPU) |
+|---|---|---|
+| full | pull and hold, push past upright, let go | 1.0 at step 216 (10.8 s), on an RTX 3090 Ti and an RTX 4070 Ti SUPER; off the striker (8.3 degrees) at 151, past 103 degrees at 196, at rest at 113.0 from 197 |
+| none, pushonly, pullonly, letgo, shove | nothing; push, knob untouched; pull and hold, no push; pull, let go, then push (caught again); no knob, hand 8 cm into the latched seatback | 0.0 each |
+| Dream-1 (dream-1-beta) | the left arm reaches the tab's side and does not grip it; the right arm goes up and away from the seat | Dream-1: 0.0 (1,200 steps); valid, one session, 0 errored trials |
+
+Probes (SCANS.md, Probe runs): stopped at 109.9 degrees before rest 0.667; held at 10.3 degrees by both hands 0.333; knob let go at 4.4 degrees at most then pushed, jaws closed round the tab without a pull at four places (tab travel 0.0 mm; the pads load the tab 31 to 52 N), and a push on the 60% seatback, 0.0 each; pulled and pushed again 1.0 at step 492; `full` then `none` in one session 1.0 then 0.0.
+
+**How the demo does it.** The demo follows the seatback's angle, read from the simulator, and keeps the push at most 3 degrees ahead. The left hand grips the tab from below, fingers 51 degrees up, jaws across its two flat faces at 40 N a finger for a pull of about 7 N; it is commanded 36 mm back (the tab stops at 20), and at 8 degrees opens to 33 mm and backs off. The right hand is commanded to 31 degrees and leaves the seatback at about upright (contact from step 124 to 179, gone at 180, 24.9 degrees).
+
+**What the cameras show** (film). Left wrist: the tab at rest (steps 43, 70), gripped and drawn (87 to 151), back after release (from 168). Right wrist: the seatback's ribs, dim, from step 156, the ribbed face and side edge at 180 to 186, the folded top end and headrest (196 to 215). Overhead: the PULL tab at the upper left edge; the seatback as a dark outline, latched and to 10 degrees of swing; most of its trunk face, folded (196 to 215). SCANS.md has the projections and a render with the shelf drawn whole.
+
+## Range check
+
+Mode `full`, on both GPU classes, the seat and latch values together at two ends, the rest one at a time. The ranges are what was run, nothing beyond. Every point scores 1.0, at the same step on both:
+
+- hard / easy end: 11 / 8 kg, recline 28 / 23, spring 500 / 250 N/m (10 / 5 N), release 19 / 10 mm, hinge damping 4 / 0, friction 1.5 / 0, striker 7 / 3 degrees, floor 1.30 / 1.10 m, tab 15 / 20 mm, stem 10 / 20 mm: step 240 / 200, rest 116.0 / 111.0; hard pullonly 0.0; easy letgo and pushonly 0.0
+- at step 216, rest 113.0: shelf 50, 55, 59, 59.5 and 61 cm; left wall 3, 4 and 20 cm from the knob; knob 2 cm nearer, farther, higher and lower; contact friction 0.5
+
+With the shelf at 50 cm a left fingertip touches the shelf's front lower edge for 59 steps, largest single point force 14.5 N, score unaffected; at the default shelf it stays 82.8 mm away. The demo takes the knob's place from the scene; the knob and wall points show reach and clearance (knob 2 cm lower / farther: the approach point is 23.3 / 9.8 mm off, the grip is reached). The shelf runs move the walls' and flanges' tops too; the floor length moves the sill and the flanges.
 
 ## Sizes
 
-| Item | Sim | Real | Source | Sim vs real |
-|---|---|---|---|---|
-| Seatback, 40% section | 0.55 m wide, 0.60 m tall, 0.10 m thick, rigid | same, foam on a steel frame | estimate from the part listing photos and the manual figure; no published drawing | rigid face: the push point does not sink in; neutral |
-| Seatback mass | 9 kg, centre 0.30 m up from the hinge | 8 to 11 kg (bound: a 40% sedan seatback of steel frame and foam); weighed in the real trial | estimate | both ends pass (range check) |
-| Recline at the latch | 25 degrees from vertical | 23 to 28 degrees (sedan rear seatback angles) | estimate; angle gauge in the real trial | both ends pass (range check) |
-| Folded stop | 113 degrees of swing, lying on the cushion | lying on the cushion (manual figure) | manual figure | neutral: gravity does this part |
-| Hinge | damping 2 N m s/rad, friction 0.5 N m | a bare pivot bushing: small | estimate | both ends pass (0 and 4 N m s/rad, 0 and 1.5 N m) |
-| Lock knob pull tab | flat tab 25 mm tall, 12 mm thick, 15 mm long along the pull (20 mm also run) | a flat tab marked PULL on a short rod, about 25 mm tall, 15 to 20 mm long | [owner's manual](https://ownersmanual.kia.com/full_webhelp/BDm/2024/en_US/topics/t00043.html) figure OBDM031068L (seatback locking knob) for the shape; sizes estimated from it; calipers in the real trial | the shortest real head, so the hardest; 20 mm passes too |
-| Knob stem (head to trim) | 10 mm, the knob standing 25 mm out of the trim (20 mm and 40 mm also run) | 10 to 20 mm, so the knob stands 25 to 40 mm out of the trim | estimate from the same photos; ruler in the real trial | the shortest real stem, so the hardest; 20 mm passes too |
-| Knob travel | 20 mm | about 20 mm to its stop | estimate; ruler in the real trial | neutral |
-| Knob return spring | 350 N/m, about 7 N at full pull | 5 to 10 N at full pull | estimate (cable release springs); spring scale in the real trial | both ends pass (range check) |
-| Latch release | at 15 of 20 mm of pull | 10 to 19 mm (near full pull) | estimate; ruler in the real trial | both ends pass (range check) |
-| Striker clearance | 5 degrees of swing (about 5 cm at the top) | 3 to 7 degrees | estimate; angle gauge in the real trial | both ends pass (range check) |
+Positions in setup; the ranges run, this task's own, in Range check; real windows in Bench checks; row by row in SCANS.md, Sizes and Trunk.
 
-The latch is a stiff joint lock on the hinge (50,000 N m/rad, effort 2,000 N m: no push of the arm moves it), released while the knob is pulled 15 mm or more, and engaged again if the knob returns while the seatback is under 5 degrees, as a rotary latch whose striker is still in its mouth does. The knob is a colliding sprung slider the hand must pull; the seatback is a colliding hinged body under gravity, tipped by the hand's contact. Contact friction 0.9 static, 0.8 dynamic (the push is along the face's normal, so friction matters little).
+| Part | Sim | From |
+|---|---|---|
+| Floor, between the arches, height | 1.20 m, 1.20 m, 60 cm | a review's rough words (Trunk) |
+| Other trunk parts | in setup | estimates |
+| Knob's place | face at x 32, 52 cm up, 5 cm from the left wall | the knob's place is this task's choice |
+| Seatback | 55 of the two sections' 118.5 cm, 46 percent (60:40 is the trade name); rigid, 9 kg, inertia 0.45, 0.28, 0.30 kg m^2 at every mass | estimates |
+| Hinge | damping 2 N m s/rad, friction 0.5 N m; its limit stops the folded seatback 0 to 19 mm above its cushion plate (self_collisions off); the cushion beside is drawn 11 cm tall | estimates |
+| Knob | tab 25 mm out of the trim, 0.03 kg, travel 20 mm, spring 350 N/m, damping 2 N s/m, friction 0.2 N | shape: the manual's [figure OBDM031068L](https://ownersmanual.kia.com/full_webhelp/BDm/2024/en_US/topics/t00043.html); the rest estimates |
+| Latch | lock 50,000 N m/rad; release at 15 mm, striker 5 degrees | estimates (Latch model) |
+| Contact friction | 0.9 static, 0.8 dynamic | estimates |
 
-**Range check.** Each estimate was run at both ends of its bound (environment variables `FRSF_KG`, `FRSF_RECLINE`, `FRSF_SPRING`, `FRSF_RELEASE`, `FRSF_HEAD`, `FRSF_STEM`, `FRSF_DAMP`, `FRSF_FRIC`, `FRSF_CLEAR`). The default run already has the knob at the low end of both its bounds (15 mm head, 10 mm stem): full 1.0 at step 233. Hardest end (11 kg, recline 28 degrees, 10 N knob spring, latch freed only at 19 mm of pull, damping 4, friction 1.5 N m, striker clearance 7 degrees): full 1.0 at step 246, pullonly 0. Easiest end (8 kg, recline 23 degrees, 5 N spring, latch freed at 10 mm, 20 mm head on a 20 mm stem, no damping or friction, 3 degrees): full 1.0 at step 213, letgo 0, pushonly 0.
+## Trunk
+
+Rough words of a 2022 Cerato (the Forte's name in Australia) sedan review ([BestFamilyCars](https://bestfamilycars.com.au/blog/2022-Kia-Cerato-Review-and-Buying-Guide-big-boot-Small-car)) give the floor ("at least 1.2m"), the 1.20 m between the arches ("about 1.2 metres") and the height ("between 500-600mm": 60 is its top). The walls stand 7.5 cm of arch depth outside the 1.20 m on each side.
+
+## Real items
+
+- Kia Back Assembly-Rr Seat 89300M7330B4U, 2019-2021 Forte 4-door sedan: [kiapartsnow](https://www.kiapartsnow.com/genuine/kia-back-assy-rr-seat~89300m7330b4u.html), $542.09 new. The buyer checks that it is the 40% section. Kia's [2020 brochure](https://www.kia.com/content/dam/kia/us/brochures/brochure_forte_2020.pdf) (pages 3 and 4) lists 60/40 split seats for LXS, EX, GT-Line and GT. The trial uses a used one (budget $50 to $150).
+- Its latch, knob, cable and striker: bought with it, from the same car.
 
 ## Real trial
 
-**Bench setup.** A used 40% rear seatback for a 2019-2021 Forte sedan with its hinge brackets, its own seatback lock (latch) assembly, the trunk-side lock knob with its cable, and the latch striker, bought together from a salvage yard or a used-parts seller (typically $50 to $150 for the seatback; an estimate). The seatback's hinge brackets bolt to a 19 mm plywood base (60 x 70 cm, clamped to the bench with two C-clamps), the hinge 6 cm above the bench top and 48 cm in front of the midpoint between the arm bases, spanning y -38 to 17 cm. The striker bolts to a plywood upright (19 mm plywood, 15 cm wide, 70 cm tall, screwed to the base with two steel corner braces) behind the seatback's top outer corner, set so the latched seatback reclines 25 +/- 1 degrees (angle gauge). The knob's housing screws to a plywood trim block (6 cm deep, 12.5 cm wide, 22 cm tall, its trunk face at x 22.5 cm, spanning y 18.5 to 31 cm and 40 to 62 cm above the bench, on a 2 x 4 post screwed to the base) beside the seatback top, the knob's face at x 20, y 27, 52 cm above the bench, its cable run to the latch as in the car. A 54 x 55 cm sheet of 1 cm closed-cell EVA foam (an interlocking gym floor tile, cut to size) stands for the cushion top in front of the hinge; it only catches the folded seatback, and any foam 1 to 2 cm thick does (check: the folded seatback lies on it within 10 degrees of the angle measured at setup). Rig beyond the arms: about $200 (seatback, plywood, bolts, gauges; estimate).
+**Bench setup** (positions as in setup). The used 40% seatback with its hinge brackets, latch, knob with cable, and striker, from a salvage yard. The trunk is 19 mm plywood with steel corner braces: a floor 1.40 x 1.95 m (x -71 to 124, two sheets) that the arm bases bolt to; walls from x -65 to 57; the sill, a plywood strip 12 cm tall across x -71 to -65; each arch a 28 cm tall half-round (a 50 cm disc, its centre 3 cm above the floor, at x 32.5) faced with a 7.5 cm strip of 3 mm hardboard; flanges 15 x 48 cm; the shelf an opaque board screwed across the wall tops; the 60% seatback a closed box 64 x 60 x 10 cm, same recline. Hinge brackets bolt to the floor, hinge 6 cm up at x 60. The striker bolts to a braced upright (15 x 70 cm) behind the top outer corner, set for a 25-degree recline; accept 23 to 28 (angle gauge). The knob's housing screws to a trim block 6 x 13.5 x 22 cm on a 2 x 4 post, its cable run as in the car. Cushion: 54 x 55 cm of 1 cm EVA foam floor tile, 1 to 2 cm will do (check: folded within 10 degrees of the angle measured at setup). Budget: about $300 beyond the arms, with a digital angle gauge at about $25.
 
-**Bench checks before trials.** Weigh the seatback (luggage scale, 0.1 kg): accept 8 to 11 kg. Hook a spring scale (0 to 50 N) at the seatback top, square to it, with the latch open: the reading that starts it moving is about 19 N at 9 kg (11.2 N m over the 0.6 m seatback); accept 16 to 24 N (8 to 11 kg). Pull the knob with a 0 to 20 N spring scale: accept 5 to 10 N at full pull; mark with a ruler (1 mm) the pull at which the latch frees (accept 10 to 19 mm). Measure the knob with calipers (0.1 mm): its flat pull tab about 25 mm tall, 10 to 14 mm thick and 15 to 20 mm long along the pull, standing 25 to 40 mm out of the trim (stem 10 to 20 mm); full pull about 20 mm. With the knob held, swing the seatback slowly and read on a digital angle gauge (0.1 degree) on its trunk face the swing at which the latch can no longer catch: accept 3 to 7 degrees.
+Tape checks (1 mm), the windows the runs support: shelf 50 to 61 cm; left wall 3 to 20 cm from the knob; knob depth within 2 cm, height 50 to 54; floor 1.10 to 1.30 m. The rest: to 2 mm (a workshop tolerance); write down the reading.
 
-**Reset.** About 30 s, nothing consumed: lift the seatback by its top and push it back until the latch clicks; check that the knob has sprung back and the seatback does not move when pushed.
+**Arm bases.** Each foot stands on the plywood: 70 x 200 x 10 mm, four 6 mm slots 90 mm to each side of the axis (y) and 12 to 23 mm fore and aft (read from the maker's [base.stl](https://github.com/i2rt-robotics/i2rt/blob/main/i2rt/robot_models/arm/yam/v1/assets/base.stl)). Axes at x 0, y 30.5 and -30.5, +/- 2 mm. Four M5 x 45 bolts through 5.5 mm holes 17.5 mm fore and aft, washers and lock nuts, the floor on 2 x 4 battens along both long edges and across at x -20 and 20. Load check: pull each arm's upper column 50 N forward and sideways (spring scale); accept no movement on a 1 mm ruler, else tighten or add a steel plate.
 
-**One trial.** Start with both arms at their ready pose and the seatback latched. Run the policy for 60 s.
+**Bench checks before trials.**
 
-**Scoring by hand.** A digital angle gauge on the seatback's trunk face, zeroed at the latched pose, read at the end of the trial: 5 degrees or more scores 0.33; more than 25 degrees (past upright) scores 0.67; lying on the cushion, within 10 degrees of the folded pose measured at setup, scores 1.0. A video from the side (30 fps, the whole swing from latched to folded in view, a 10 cm scale on the trim block) records the run for review. There is no whole-trial or void rule: the score is the end state alone.
+- Seatback (luggage scale, 0.1 kg): 8 to 11 kg, else buy another. Latch open, its top pulled square (0 to 50 N scale) starts at about 19 N at 9 kg: accept 15 (8 kg, 23 degrees, no friction) to 28 (11 kg, 28, 1.5 N m).
+- Knob (0 to 20 N scale), measured with the seatback latched: 5 to 10 N at full pull; frees at 10 to 19 mm (ruler, 1 mm). Calipers (0.1 mm): tab 23 to 27 mm tall, 10 to 14 thick, 15 to 20 long; stem 10 to 20; full pull 18 to 22 and past the release. Tab height, tab thickness and full pull: the 2 mm workshop tolerance.
+- Grip: at friction 0.5 on two pads 7 N needs about 7 N a finger; close as the policy commands and pull the arm back 20 mm: the pads must keep their place on the tab (left wrist camera).
+- Push, before a run counts (the first measurement of the real arm's push): latched, a 0 to 100 N scale between right fingertips and push point, command 2.5 cm past contact: runs count once it reads at least the starting force there (about 34 N; 28 at the easy end, 51 at the hard; the top reading times 60/33).
+- Latch: knob held, swing slowly; it stops catching at 3 to 7 degrees (digital angle gauge, 0.1 degree). Latched, pull the knob and let go: it must go back by itself and the seatback must stay put when pushed. A latch that does not catch again is not used.
+- A part outside any window is replaced before trials. Push face: the seat's own fabric or carpet (friction 0.9 in the sim, 0.5 also run).
 
-**Gripper protection.** None needed: the knob is plastic and the push is on fabric.
+**Reset.** About 30 s, nothing consumed: push the seatback back by its top, holding it, until the latch clicks; check that the knob is back and the seatback stays put when pushed.
+
+**One trial.** Both arms at their ready pose, seatback latched; run the policy; stop when folded and at rest for 1.0 s, or at 60 s.
+
+**Scoring by hand.** A digital angle gauge (0.1 degree) on the trunk face's outer edge, clear of the push point, zeroed when latched; a 30 fps camera on the cabin side, above hinge height, films the cabin face and edge from latched to folded (a 10 cm scale on it), then the gauge, face up; the camera stands past the walls' end at x 57. From the last second: within 10 degrees of the folded pose measured at setup, changing by 1 degree or less (1.0); else more than the recline measured at setup (0.67); else 5 degrees or more (0.33). These three tiers are the whole score.
+
+**Safety.** During a run nobody is within reach of the folding seatback; the operator is behind the arms with an emergency stop. Kia warns that a seatback returned without holding it "could spring forward": hold it at each reset. Bare grippers: plastic knob, fabric or carpet push face.
+
+## Licence
+
+MIT. No third-party asset is in this folder.
+
+[m24]: https://ownersmanual.kia.com/full_webhelp/BDm/2024/en_US/topics/t00043.html
+[m42]: https://ownersmanual.kia.com/full_webhelp/BDm/2024/en_US/topics/t00042.html
+[m19]: https://ownersmanual.kia.com/full_webhelp/BD/2019/en_US/manual/2019%20Forte%20OM.pdf

@@ -769,6 +769,16 @@ def _restore_touched(environment) -> None:
     _PUSHED.clear()
 
 
+def _put_back_joints(environment) -> None:
+    """Put every mechanism's joints back to their start positions, at rest: the harness's reset leaves them where the last trial left them."""
+    for spec in _SPECS.values():
+        if spec.role != "jointed":
+            continue
+        asset = environment.unwrapped.scene[spec.name]
+        asset.write_joint_position_to_sim_index(position=asset.data.default_joint_pos.torch.clone())
+        asset.write_joint_velocity_to_sim_index(velocity=asset.data.default_joint_vel.torch.clone() * 0.0)
+
+
 def set_visible(path: str, visible: bool) -> None:
     """Show or hide a prim under `ENV_PATH` (only when that changes), for anything seen that follows the task's state. A path that is not there raises."""
     import isaaclab.sim as sim_utils
@@ -866,6 +876,7 @@ def _patch_embodiment(module) -> None:
         _SEED[0] = k.get("seed")
         if self._env is not None:
             _restore_touched(self._env)
+            _put_back_joints(self._env)
         obs = reset(self, *a, **k)
         for fn in _RESET:
             fn(self._env)
